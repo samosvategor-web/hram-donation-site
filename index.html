@@ -1262,7 +1262,7 @@
         <div class="section-label">Документы</div>
         <h2>Планы <em>благоустройства</em></h2>
       </div>
-      <p>Полные проектные материалы по обустройству прихода и&nbsp;прилегающей территории.</p>
+      <p>Полные проектные материалы по благоустройству храма и&nbsp;планам прихода.</p>
     </div>
 
     <div class="docs-grid">
@@ -1270,17 +1270,17 @@
         <div class="doc-head">
           <div class="doc-title">
             <span class="doc-num">I.</span>
-            <div class="doc-name">Благоустройство прихода</div>
+            <div class="doc-name">Благоустройство храма</div>
           </div>
           <div class="doc-actions">
-            <a href="https://disk.yandex.ru/i/mJMZBzGeRTajCg" target="_blank" rel="noopener" title="Открыть на Яндекс.Диске">
+            <a href="./church-improvement.pdf" target="_blank" rel="noopener" title="Открыть в новой вкладке">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <path d="M14 4h6v6"/><path d="M10 14L20 4"/><path d="M20 14v6H4V4h6"/>
               </svg>
             </a>
           </div>
         </div>
-        <div class="pdf-viewer" data-pdf="https://disk.yandex.ru/i/mJMZBzGeRTajCg">
+        <div class="pdf-viewer" data-pdf="./church-improvement.pdf">
           <div class="pdf-stage">
             <canvas class="pdf-canvas"></canvas>
             <div class="pdf-state">
@@ -1321,17 +1321,17 @@
         <div class="doc-head">
           <div class="doc-title">
             <span class="doc-num">II.</span>
-            <div class="doc-name">Благоустройство территории</div>
+            <div class="doc-name">Планы прихода</div>
           </div>
           <div class="doc-actions">
-            <a href="https://disk.yandex.ru/i/Il0DAsMMYHwkyg" target="_blank" rel="noopener" title="Открыть на Яндекс.Диске">
+            <a href="./parish-plans.pdf" target="_blank" rel="noopener" title="Открыть в новой вкладке">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <path d="M14 4h6v6"/><path d="M10 14L20 4"/><path d="M20 14v6H4V4h6"/>
               </svg>
             </a>
           </div>
         </div>
-        <div class="pdf-viewer" data-pdf="https://disk.yandex.ru/i/Il0DAsMMYHwkyg">
+        <div class="pdf-viewer" data-pdf="./parish-plans.pdf">
           <div class="pdf-stage">
             <canvas class="pdf-canvas"></canvas>
             <div class="pdf-state">
@@ -1484,10 +1484,34 @@
   });
 
   // ─── PDF viewers ───
-  // 1) load PDF.js from CDN (ESM build, v4)
-  // 2) for each .pdf-viewer: resolve direct download URL via Yandex public API
-  // 3) render pages onto <canvas> with prev/next + zoom controls
+  // 1) load PDF.js from CDN (UMD build v3)
+  // 2) for each .pdf-viewer:
+  //    a) if data-pdf is a Yandex.Disk public link → resolve to direct URL via API,
+  //       then wrap it in a CORS proxy (Yandex downloader sends no CORS headers,
+  //       so a cross-origin fetch from GitHub Pages would be blocked)
+  //    b) if data-pdf is a relative/local URL → use it as-is (no proxy needed)
+  // 3) render pages onto <canvas> with prev/next + zoom + fullscreen controls
   const PDFJS_BASE = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174';
+
+  /*
+   * CORS proxy for Yandex downloader URLs.
+   * Why: https://downloader.disk.yandex.ru/... does not send
+   *   Access-Control-Allow-Origin headers, so the browser blocks
+   *   cross-origin fetches from any real https origin (e.g. *.github.io).
+   * Locally (file://) browsers are lenient and the request succeeds —
+   *   that's why "it works on my machine" but fails on GitHub Pages.
+   * Options:
+   *   - corsproxy.io   — free public proxy (default below). Easy but external.
+   *   - allorigins     — alt: 'https://api.allorigins.win/raw?url='
+   *   - self-hosted    — Cloudflare Worker / Vercel function, 20 lines of code.
+   *   - none ('')      — disable proxy; works only when PDF is same-origin.
+   * For production reliability, host the PDFs yourself or run your own proxy.
+   */
+  const CORS_PROXY = 'https://corsproxy.io/?';
+
+  function isYandexPublicUrl(u) {
+    return /^https?:\/\/(disk|yadi)\.(yandex|sk)\.[a-z.]+\/[id]\//i.test(u);
+  }
 
   function loadPdfJs() {
     return new Promise((resolve, reject) => {
@@ -1582,8 +1606,27 @@
     async load() {
       try {
         const pdfjs = await loadPdfJs();
-        const directUrl = await resolveYandexUrl(this.publicUrl);
-        const task = pdfjs.getDocument({ url: directUrl, withCredentials: false });
+
+        // Resolve to a fetchable URL.
+        // - Yandex public link → API call → wrap with CORS proxy
+        // - anything else (e.g. "./files/plan.pdf") → use as is
+        let url = this.publicUrl;
+        let viaProxy = false;
+        if (isYandexPublicUrl(url)) {
+          const direct = await resolveYandexUrl(url);
+          url = CORS_PROXY ? (CORS_PROXY + encodeURIComponent(direct)) : direct;
+          viaProxy = !!CORS_PROXY;
+        }
+
+        const task = pdfjs.getDocument({
+          url,
+          withCredentials: false,
+          // Many CORS proxies strip Range/streaming headers, which breaks PDF.js's
+          // chunked fetching. Falling back to a single full download is slower for
+          // big files but more compatible. (Has no downside for small PDFs.)
+          disableRange:  viaProxy,
+          disableStream: viaProxy
+        });
         this.pdf = await task.promise;
         this.totalEl.textContent = this.pdf.numPages;
         this.pageNum = 1;
