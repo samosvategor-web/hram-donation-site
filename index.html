@@ -862,12 +862,12 @@
     background:
       linear-gradient(135deg, #2a2622 0%, #1f1c19 100%);
     padding: 24px 18px;
-    display: flex;
-    justify-content: center;
-    align-items: flex-start;
     scrollbar-width: thin;
     scrollbar-color: var(--gold-deep) transparent;
+    cursor: grab;
+    user-select: none;
   }
+  .pdf-stage.is-grabbing { cursor: grabbing; }
   @media (max-width: 700px) {
     .pdf-stage { aspect-ratio: 4 / 3; }
   }
@@ -899,11 +899,10 @@
   .pdf-stage::-webkit-scrollbar-thumb:hover { background: var(--gold-deep); }
 
   .pdf-canvas {
-    max-width: 100%;
-    height: auto;
+    display: block;
+    margin: 0 auto;
     background: white;
     box-shadow: 0 8px 28px rgba(0, 0, 0, .35);
-    display: block;
   }
 
   /* state overlays */
@@ -1555,6 +1554,30 @@
         rT = setTimeout(() => this.pdf && this.render(), 180);
       });
       ro.observe(this.stage);
+
+      // hand tool: drag inside the stage to pan when zoomed in
+      let dragging = false, sx = 0, sy = 0, sl = 0, st = 0;
+      this.stage.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        dragging = true;
+        sx = e.clientX; sy = e.clientY;
+        sl = this.stage.scrollLeft; st = this.stage.scrollTop;
+        this.stage.classList.add('is-grabbing');
+        e.preventDefault();
+      });
+      const onMove = (e) => {
+        if (!dragging) return;
+        this.stage.scrollLeft = sl - (e.clientX - sx);
+        this.stage.scrollTop  = st - (e.clientY - sy);
+      };
+      const endDrag = () => {
+        if (!dragging) return;
+        dragging = false;
+        this.stage.classList.remove('is-grabbing');
+      };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', endDrag);
+      window.addEventListener('blur', endDrag);
     }
 
     showState(html, isError) {
