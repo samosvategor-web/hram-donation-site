@@ -1013,14 +1013,31 @@
 
   /* ───────── footer image section ───────── */
   .footer-image {
+    position: relative;
     width: 100%;
     background: var(--paper);
-    border-top: 1px solid var(--rule);
   }
-  .footer-image img {
+  .footer-image img,
+  .footer-image video {
     display: block;
     width: 100%;
     height: auto;
+  }
+  /* мягкий градиентный переход от страницы к видео */
+  .footer-image::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 140px;
+    pointer-events: none;
+    background: linear-gradient(
+      to bottom,
+      rgba(244, 239, 229, 1) 0%,
+      rgba(244, 239, 229, 0.85) 30%,
+      rgba(244, 239, 229, 0.45) 65%,
+      rgba(244, 239, 229, 0) 100%
+    );
+    z-index: 2;
   }
 
   /* ───────── credit bar ───────── */
@@ -1372,7 +1389,7 @@
 
 <!-- ───── FOOTER IMAGE ───── -->
 <section class="footer-image" aria-label="Город золотой">
-  <img src="footer.png" alt="Под небом голубым есть город золотой — иллюстрация со львом, тельцом и орлом" />
+  <video src="footer_video.MP4" autoplay loop muted playsinline preload="auto" aria-label="Под небом голубым есть город золотой — иллюстрация со львом, тельцом и орлом"></video>
 </section>
 
 <!-- ───── CREDIT BAR ───── -->
