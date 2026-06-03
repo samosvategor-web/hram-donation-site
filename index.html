@@ -109,19 +109,20 @@ section{padding:90px 0;position:relative;}
 .embed{margin:46px auto 0;max-width:980px;border:1px solid var(--border);background:#e8e5de;position:relative;overflow:hidden;}
 .embed .ratio{position:relative;width:100%;aspect-ratio:16/10;}
 .embed .ratio>iframe{position:absolute;inset:0;width:100%;height:100%;border:0;}
-/* pseudo-fullscreen fallback (when the native Fullscreen API is blocked, e.g. inside an embedding frame) */
-.embed.fs-on{position:fixed;inset:0;margin:0;max-width:none;border:0;z-index:9999;}
+/* app-mode: the tour always opens full-viewport, like a launched app */
+.embed.fs-on{position:fixed;inset:0;margin:0;max-width:none;border:0;z-index:9999;background:#e8e5de;}
 .embed.fs-on .ratio{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto;}
-/* native fullscreen (real devices) — hides the browser's address bar / menu */
-.embed:fullscreen{width:100%;height:100%;max-width:none;margin:0;border:0;background:#000;}
-.embed:-webkit-full-screen{width:100%;height:100%;max-width:none;margin:0;border:0;background:#000;}
+/* native fullscreen (real devices) — also hides the browser's address bar / menu */
+.embed:fullscreen{width:100%;height:100%;max-width:none;margin:0;border:0;background:#e8e5de;}
+.embed:-webkit-full-screen{width:100%;height:100%;max-width:none;margin:0;border:0;background:#e8e5de;}
 .embed:fullscreen .ratio,.embed:-webkit-full-screen .ratio{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto;}
-.embed-fs{position:absolute;top:12px;right:12px;z-index:6;display:none;align-items:center;gap:8px;
-  font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;cursor:pointer;
-  background:rgba(20,16,10,.55);color:#fff;border:1px solid rgba(255,255,255,.35);
-  padding:9px 13px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);transition:.2s;}
-.embed-fs:hover{background:rgba(20,16,10,.8);border-color:#fff;}
-.embed-fs svg{width:14px;height:14px;}
+/* close (quit app) button */
+.embed-close{position:fixed;top:16px;right:16px;z-index:10001;display:none;align-items:center;justify-content:center;
+  width:46px;height:46px;border-radius:50%;cursor:pointer;border:1px solid rgba(255,255,255,.45);
+  background:rgba(20,16,10,.62);color:#fff;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  box-shadow:0 4px 18px rgba(0,0,0,.28);transition:background .2s,transform .2s;}
+.embed-close:hover{background:rgba(20,16,10,.85);transform:rotate(90deg);}
+.embed-close svg{width:18px;height:18px;display:block;}
 .embed .poster{position:absolute;inset:0;cursor:pointer;}
 .embed .poster img{width:100%;height:100%;object-fit:contain;}
 .embed .poster .veil{position:absolute;inset:0;background:rgba(232,229,222,0);
@@ -448,55 +449,58 @@ section{padding:90px 0;position:relative;}
   }, { threshold:.12 });
   document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
 
-  /* ---------- click-to-load embeds + pseudo-fullscreen ---------- */
-  const FS_ENTER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5"/></svg>На весь экран';
-  const FS_EXIT  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 4v5H4 M15 4v5h5 M9 20v-5H4 M15 20v-5h5"/></svg>Свернуть';
+  /* ---------- play → launch tour as a fullscreen "app", ✕ to quit ---------- */
   const fsElement = ()=> document.fullscreenElement || document.webkitFullscreenElement || null;
-  function exitPseudo(){ const el=document.querySelector('.embed.fs-on'); if(el){ el.classList.remove('fs-on'); const b=el.querySelector('.embed-fs'); if(b) b.innerHTML=FS_ENTER; } document.body.style.overflow=''; }
-  function exitFs(){
-    if(fsElement()){ const ex=document.exitFullscreen||document.webkitExitFullscreen; if(ex) ex.call(document); }
-    exitPseudo();
+  const CLOSE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+  let openBox = null;
+
+  function quitApp(){
+    if(!openBox) return;
+    const box = openBox;
+    if(fsElement()){ const ex=document.exitFullscreen||document.webkitExitFullscreen; if(ex){ try{ ex.call(document); }catch(e){} } }
+    box.classList.remove('fs-on');
+    document.body.style.overflow='';
+    const cb = box.querySelector('.embed-close'); if(cb) cb.style.display='none';
+    const ifr = box.querySelector('.ratio iframe'); if(ifr) ifr.remove();   // unload tour (quit)
+    const poster = box.querySelector('.poster'); if(poster) poster.style.display='';
+    openBox = null;
   }
-  document.addEventListener('keydown', e=>{ if(e.key==='Escape') exitFs(); });
-  // keep button label in sync when the native fullscreen state changes (incl. system back-gesture)
-  function syncFsBtn(){
-    const fe=fsElement();
-    document.querySelectorAll('.embed-fs').forEach(b=>{ const box=b.closest('.embed'); b.innerHTML=(fe===box)?FS_EXIT:FS_ENTER; });
-    if(!fe) document.body.style.overflow='';
+
+  function launchApp(box){
+    const src = box.dataset.embed;
+    // load the tour fresh
+    const ifr = document.createElement('iframe');
+    ifr.src = encodeURI(src);
+    ifr.setAttribute('allow','accelerometer; gyroscope; xr-spatial-tracking');
+    box.querySelector('.ratio').appendChild(ifr);
+    // hide the poster, go full-viewport
+    const poster = box.querySelector('.poster'); if(poster) poster.style.display='none';
+    box.classList.add('fs-on');
+    document.body.style.overflow='hidden';
+    openBox = box;
+    // close (✕) button
+    let cb = box.querySelector('.embed-close');
+    if(!cb){
+      cb = document.createElement('button');
+      cb.className='embed-close'; cb.setAttribute('aria-label','Закрыть'); cb.innerHTML=CLOSE_SVG;
+      cb.addEventListener('click', quitApp);
+      box.appendChild(cb);
+    }
+    cb.style.display='flex';
+    // also request real fullscreen so the browser chrome (address bar/menu) hides — best effort
+    const req = box.requestFullscreen || box.webkitRequestFullscreen;
+    if(req){ try{ const p=req.call(box); if(p&&p.catch) p.catch(()=>{}); }catch(e){} }
   }
-  document.addEventListener('fullscreenchange', syncFsBtn);
-  document.addEventListener('webkitfullscreenchange', syncFsBtn);
+
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape' && openBox) quitApp(); });
+  // if the user leaves native fullscreen via system gesture/Esc, quit the app too
+  function onFsChange(){ if(!fsElement() && openBox && !openBox.dataset.justOpened) quitApp(); }
+  document.addEventListener('fullscreenchange', onFsChange);
+  document.addEventListener('webkitfullscreenchange', onFsChange);
+
   document.querySelectorAll('.embed').forEach(box=>{
     const poster = box.querySelector('.poster');
-    poster.addEventListener('click', ()=>{
-      const src = box.dataset.embed;
-      const ifr = document.createElement('iframe');
-      ifr.src = encodeURI(src);
-      ifr.setAttribute('allow','accelerometer; gyroscope; xr-spatial-tracking');
-      ifr.setAttribute('loading','lazy');
-      box.querySelector('.ratio').appendChild(ifr);
-      poster.remove();
-      const fsBtn = document.createElement('button');
-      fsBtn.className = 'embed-fs'; fsBtn.innerHTML = FS_ENTER; fsBtn.style.display='flex';
-      fsBtn.addEventListener('click', ()=>{
-        // already open? close.
-        if(fsElement()===box || box.classList.contains('fs-on')){ exitFs(); return; }
-        // Try the REAL Fullscreen API first — this is what hides the mobile
-        // browser's address bar & menu (Yandex/Chrome/Safari) on real devices.
-        const req = box.requestFullscreen || box.webkitRequestFullscreen;
-        if(req){
-          try{
-            const p = req.call(box);
-            if(p && p.then){ p.then(()=>{ fsBtn.innerHTML=FS_EXIT; }).catch(()=>{ box.classList.add('fs-on'); fsBtn.innerHTML=FS_EXIT; document.body.style.overflow='hidden'; }); }
-            else { fsBtn.innerHTML=FS_EXIT; }
-            return;
-          }catch(e){}
-        }
-        // Fallback: CSS expand (used only where the native API is unavailable/blocked)
-        box.classList.add('fs-on'); fsBtn.innerHTML=FS_EXIT; document.body.style.overflow='hidden';
-      });
-      box.appendChild(fsBtn);
-    });
+    poster.addEventListener('click', ()=> launchApp(box));
   });
 
   /* ---------- carousel ---------- */
