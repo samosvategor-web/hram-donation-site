@@ -106,7 +106,7 @@ section{padding:90px 0;position:relative;}
 .prose{max-width:680px;margin:26px auto 0;text-align:center;color:var(--ink-2);font-size:18px;line-height:1.85;}
 
 /* ---------- embed loader ---------- */
-.embed{margin:46px auto 0;max-width:980px;border:1px solid var(--border);background:#000;position:relative;overflow:hidden;}
+.embed{margin:46px auto 0;max-width:980px;border:1px solid var(--border);background:#e8e5de;position:relative;overflow:hidden;}
 .embed .ratio{position:relative;width:100%;aspect-ratio:16/10;}
 .embed .ratio>iframe{position:absolute;inset:0;width:100%;height:100%;border:0;}
 /* pseudo-fullscreen fallback (when the native Fullscreen API is blocked, e.g. inside an embedding frame) */
@@ -123,14 +123,16 @@ section{padding:90px 0;position:relative;}
 .embed-fs:hover{background:rgba(20,16,10,.8);border-color:#fff;}
 .embed-fs svg{width:14px;height:14px;}
 .embed .poster{position:absolute;inset:0;cursor:pointer;}
-.embed .poster img{width:100%;height:100%;object-fit:cover;}
-.embed .poster .veil{position:absolute;inset:0;background:linear-gradient(180deg,rgba(20,16,10,.15),rgba(20,16,10,.55));
+.embed .poster img{width:100%;height:100%;object-fit:contain;}
+.embed .poster .veil{position:absolute;inset:0;background:rgba(232,229,222,0);
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;transition:background .25s;}
-.embed .poster:hover .veil{background:linear-gradient(180deg,rgba(20,16,10,.05),rgba(20,16,10,.45));}
-.embed .poster .play{width:64px;height:64px;border:1px solid rgba(255,255,255,.8);border-radius:50%;
-  display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.25);}
-.embed .poster .play svg{width:22px;height:22px;margin-left:3px;}
-.embed .poster .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:#fff;}
+.embed .poster:hover .veil{background:rgba(232,229,222,.28);}
+.embed .poster .play{width:64px;height:64px;border:1px solid rgba(36,28,18,.55);border-radius:50%;
+  display:flex;align-items:center;justify-content:center;background:rgba(255,253,248,.85);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);box-shadow:0 2px 14px rgba(36,28,18,.16);}
+.embed .poster .play svg{width:22px;height:22px;margin-left:3px;fill:var(--ink);}
+.embed .poster .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink);
+  background:rgba(255,253,248,.85);padding:8px 15px;border:1px solid rgba(36,28,18,.16);
+  backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);box-shadow:0 2px 14px rgba(36,28,18,.12);}
 .embed-cap{max-width:980px;margin:12px auto 0;font-family:var(--mono);font-size:10px;letter-spacing:.14em;
   text-transform:uppercase;color:var(--ink-faint);display:flex;justify-content:center;gap:14px;}
 
@@ -322,7 +324,7 @@ section{padding:90px 0;position:relative;}
   <div class="embed reveal" data-embed="Навигация по помещению.html">
     <div class="ratio">
       <div class="poster">
-        <img src="assets/site/parish/06-kids-angel-lounge.jpg" alt="Интерьер прихода">
+        <img src="assets/site/parish/00-plan.png" alt="План интерьеров прихода">
         <div class="veil">
           <div class="play"><svg viewBox="0 0 24 24" fill="#fff"><path d="M5 3l16 9-16 9z"/></svg></div>
           <div class="lbl">Посмотреть проект · 3D</div>
@@ -372,7 +374,7 @@ section{padding:90px 0;position:relative;}
   <div class="embed reveal" data-embed="Благоустройство храма.html">
     <div class="ratio">
       <div class="poster">
-        <img src="assets/site/landscaping/garden-eagle.jpg" alt="Благоустройство территории храма">
+        <img src="assets/site/landscaping/00-plan.png" alt="Генплан благоустройства территории">
         <div class="veil">
           <div class="play"><svg viewBox="0 0 24 24" fill="#fff"><path d="M5 3l16 9-16 9z"/></svg></div>
           <div class="lbl">Посмотреть проект · 3D</div>

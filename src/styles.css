@@ -165,6 +165,31 @@ html,body{margin:0;height:100%;background:var(--paper);overflow:hidden;
 .loader .ld-bar i{position:absolute;left:0;top:0;height:100%;width:0;background:var(--ink);transition:width .2s;}
 .loader .ld-p{font-size:9px;letter-spacing:.18em;color:var(--ink-3);}
 
+/* ---------- onboarding tour ---------- */
+.tour-scrim{position:absolute;inset:0;background:rgba(20,18,14,.46);z-index:24;transition:opacity .3s;}
+.tour-spot{outline:1.5px solid var(--accent);outline-offset:6px;border-radius:2px;
+  box-shadow:0 0 0 6px rgba(31,79,134,.12);transition:outline-color .2s;}
+.tour-card{position:absolute;z-index:27;width:min(300px,82vw);background:var(--paper);
+  border:1px solid var(--hair-strong);padding:16px 17px 14px;box-shadow:0 18px 50px rgba(20,18,14,.3);}
+.tc-step{font-size:9px;letter-spacing:.26em;color:var(--ink-3);text-transform:uppercase;margin-bottom:8px;}
+.tc-title{font-size:13px;letter-spacing:.03em;font-weight:600;color:var(--ink);margin-bottom:7px;}
+.tc-text{font-size:11px;line-height:1.7;color:var(--ink-2);}
+.tc-text b{color:var(--ink);font-weight:600;}
+.tc-text .k{display:inline-block;border:1px solid var(--hair);padding:0 4px;border-radius:2px;font-size:9px;color:var(--ink);}
+.tc-btns{display:flex;gap:8px;margin-top:15px;align-items:center;}
+.tc-btns button{appearance:none;font-family:var(--mono);cursor:pointer;font-size:9.5px;letter-spacing:.16em;
+  text-transform:uppercase;padding:8px 12px;border:1px solid var(--hair);background:none;color:var(--ink-2);transition:color .2s,background .2s;}
+.tc-btns button:hover{color:var(--ink);border-color:var(--hair-strong);}
+.tc-skip{margin-left:auto;border:0 !important;color:var(--ink-3);padding:8px 2px !important;letter-spacing:.14em !important;}
+.tc-next{background:var(--ink) !important;color:var(--paper) !important;border-color:var(--ink) !important;}
+.tc-next:hover{opacity:.88;}
+/* replay onboarding */
+.tour-replay{position:absolute;right:24px;bottom:24px;z-index:6;width:34px;height:34px;border-radius:50%;
+  appearance:none;border:1px solid var(--hair);background:var(--panel);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);
+  font-family:var(--mono);font-size:13px;line-height:1;color:var(--ink-2);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:color .2s,border-color .2s;}
+.tour-replay:hover{color:var(--ink);border-color:var(--hair-strong);}
+
 /* ---------- responsive: tablet ---------- */
 @media (max-width:900px){
   .compass{width:230px;}
@@ -191,6 +216,7 @@ html,body{margin:0;height:100%;background:var(--paper);overflow:hidden;
   .w-dial{right:16px;bottom:80px;width:128px;height:128px;}
   .w-scale{width:90vw;bottom:24px;}
   .statusbar{left:14px;bottom:16px;right:120px;max-width:none;}
+  .tour-replay{right:14px;bottom:14px;}
   .hint{font-size:9.5px;}
   .hint .k{padding:1px 5px;}
 }

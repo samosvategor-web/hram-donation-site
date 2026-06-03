@@ -235,6 +235,87 @@ export function mountUI(container, nav, uiOpts = {}) {
     if (renderSeg) renderSeg.querySelectorAll('.seg2 button').forEach((x) => x.classList.toggle('on', x.dataset.s === st.renderStyle));
   });
   showHint('orbit');
+
+  // ============================================================
+  //  Onboarding tour — coachmarks over each control (first visit)
+  // ============================================================
+  function startTour() {
+    const steps = [
+      { el: null, title: 'Как смотреть проект', text: 'Короткий тур по управлению — несколько шагов. Можно пропустить в любой момент.' },
+      renderSeg && { el: renderSeg, title: 'Отрисовка', text: 'Переключайте вид модели: <b>«Гипс»</b> — белый макет, <b>«Набросок»</b> — лёгкие линии.' },
+      { el: comp, title: 'Компас', text: 'Показывает, в какую сторону направлен ваш взгляд.' },
+      { el: widgets[1], title: 'Обзор и прогулка', text: isTouch
+          ? 'Тяните ползунок вниз, чтобы войти внутрь от первого лица, и вверх — чтобы вернуться к обзору 3/4.'
+          : 'Тяните ползунок (или крутите <b>колесо мыши</b>): вниз — войти внутрь от первого лица, вверх — вернуться к обзору 3/4.' },
+      { el: status, title: 'Управление', text: isTouch
+          ? `<b>Проведите</b> — повернуть · <b>двумя пальцами</b> — сдвинуть · <b>двойное касание</b> по ${G.dat} — войти. В прогулке: <b>коснитесь ${G.acc === 'пол' ? 'пола' : 'земли'}</b> — идти.`
+          : `<b>Тяните</b> — повернуть · <b>двойной клик</b> по ${G.dat} — войти. В прогулке: <span class="k">W</span><span class="k">A</span><span class="k">S</span><span class="k">D</span> или <b>клик</b> по ${G.dat} — идти.` },
+    ].filter(Boolean);
+
+    const scrim = el('div', 'tour-scrim');
+    const card = el('div', 'tour-card');
+    ov.appendChild(scrim); ov.appendChild(card);
+    let i = 0, spotEl = null;
+
+    function clearSpot() { if (spotEl) { spotEl.classList.remove('tour-spot'); spotEl.style.zIndex = ''; spotEl = null; } }
+    function place(s) {
+      const cw = card.offsetWidth, ch = card.offsetHeight, M = 16, vw = innerWidth, vh = innerHeight;
+      if (!s.el) { card.style.left = (vw - cw) / 2 + 'px'; card.style.top = (vh - ch) / 2 + 'px'; return; }
+      const r = s.el.getBoundingClientRect();
+      let left, top;
+      if (vh - r.bottom > ch + M && r.left < vw * 0.72) { top = r.bottom + M; left = r.left; }
+      else if (r.left > cw + M) { left = r.left - cw - M; top = r.top; }
+      else if (r.top > ch + M) { top = r.top - ch - M; left = r.left; }
+      else if (vw - r.right > cw + M) { left = r.right + M; top = r.top; }
+      else { left = (vw - cw) / 2; top = vh - ch - M; }
+      card.style.left = clamp(left, M, vw - cw - M) + 'px';
+      card.style.top = clamp(top, M, vh - ch - M) + 'px';
+    }
+    function render() {
+      const s = steps[i];
+      clearSpot();
+      if (s.el) { s.el.classList.add('tour-spot'); s.el.style.zIndex = '26'; spotEl = s.el; }
+      const last = i === steps.length - 1;
+      card.innerHTML =
+        `<div class="tc-step">${i + 1} / ${steps.length}</div>` +
+        `<div class="tc-title">${s.title}</div>` +
+        `<div class="tc-text">${s.text}</div>` +
+        `<div class="tc-btns">` +
+          (i > 0 ? `<button class="tc-back">Назад</button>` : '') +
+          (last ? '' : `<button class="tc-skip">Пропустить</button>`) +
+          `<button class="tc-next">${last ? 'Понятно' : 'Далее'}</button>` +
+        `</div>`;
+      // measure then position (card width is fixed by CSS)
+      place(s);
+      const back = card.querySelector('.tc-back'); if (back) back.onclick = () => { i = Math.max(0, i - 1); render(); };
+      const skip = card.querySelector('.tc-skip'); if (skip) skip.onclick = finish;
+      card.querySelector('.tc-next').onclick = () => { if (last) finish(); else { i++; render(); } };
+    }
+    function finish() {
+      clearSpot();
+      scrim.remove(); card.remove();
+      removeEventListener('resize', onResize);
+      try { localStorage.setItem('nav.tourSeen', '1'); } catch (e) {}
+    }
+    function onResize() { place(steps[i]); }
+    addEventListener('resize', onResize);
+    render();
+  }
+  // expose for manual replay (e.g. the "?" control)
+  window.__startTour = startTour;
+  function restartTour(){
+    document.querySelectorAll('.tour-scrim,.tour-card').forEach(e=>e.remove());
+    document.querySelectorAll('.tour-spot').forEach(e=>{ e.classList.remove('tour-spot'); e.style.zIndex=''; });
+    startTour();
+  }
+  const replay = el('button', 'tour-replay', '?');
+  replay.title = 'Показать обучение заново';
+  replay.setAttribute('aria-label', 'Обучающий тур');
+  replay.onclick = restartTour;
+  ov.appendChild(replay);
+  let tourSeen = false;
+  try { tourSeen = localStorage.getItem('nav.tourSeen') === '1'; } catch (e) {}
+  if (!tourSeen) nav.onReady(() => setTimeout(startTour, 1400));
 }
 
 // drag a value control: maps pointer → 0..1 via fn, sets nav.targetImmersion
