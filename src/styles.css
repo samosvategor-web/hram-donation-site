@@ -1,0 +1,200 @@
+/* Architectural-minimal overlay — ink on warm paper, monospace, hairlines. */
+:root{
+  --paper:#e8e5de;
+  --ink:#1b1a16;
+  --ink-2:rgba(27,26,22,.62);
+  --ink-3:rgba(27,26,22,.34);
+  --hair:rgba(27,26,22,.22);
+  --hair-soft:rgba(27,26,22,.12);
+  --hair-strong:rgba(27,26,22,.5);
+  --accent:#1f4f86;
+  --panel:rgba(245,243,237,.66);
+  --mono:'IBM Plex Mono','SFMono-Regular',ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--paper);overflow:hidden;
+  font-family:var(--mono);color:var(--ink);
+  -webkit-font-smoothing:antialiased;text-rendering:geometricPrecision;}
+#app{position:fixed;inset:0;overflow:hidden;}
+#gl{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab;}
+#gl:active{cursor:grabbing;}
+
+.overlay{position:absolute;inset:0;pointer-events:none;z-index:5;}
+.overlay > *{pointer-events:auto;}
+
+.lbl{font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-2);}
+.tick-num{font-size:9px;letter-spacing:.12em;color:var(--ink-3);}
+
+/* ---------- wordmark ---------- */
+.wordmark{position:absolute;top:22px;left:24px;line-height:1.5;}
+.wordmark .a{font-size:12px;letter-spacing:.26em;font-weight:600;text-transform:uppercase;white-space:nowrap;}
+.wordmark .b{font-size:9.5px;letter-spacing:.28em;color:var(--ink-3);text-transform:uppercase;margin-top:3px;}
+.wordmark .rule{width:34px;height:1px;background:var(--hair-strong);margin:9px 0 0;}
+
+/* ---------- render-style toggle ---------- */
+.rstyle{position:absolute;top:96px;left:24px;display:flex;flex-direction:column;gap:7px;}
+.rstyle .cap{font-size:9px;letter-spacing:.24em;color:var(--ink-3);text-transform:uppercase;}
+.rstyle .seg2{display:flex;border:1px solid var(--hair);background:var(--panel);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);width:max-content;}
+.rstyle .seg2 button{appearance:none;border:0;border-left:1px solid var(--hair-soft);background:none;font-family:var(--mono);
+  cursor:pointer;padding:7px 12px;font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-2);transition:.25s;}
+.rstyle .seg2 button:first-child{border-left:0;}
+.rstyle .seg2 button:hover{color:var(--ink);}
+.rstyle .seg2 button.on{background:var(--ink);color:var(--paper);}
+
+/* ---------- minimap (removed) ---------- */
+
+/* ---------- switcher ---------- */
+.switcher{position:absolute;top:22px;right:24px;display:flex;flex-direction:column;align-items:flex-end;gap:9px;}
+.switcher .cap{font-size:9px;letter-spacing:.26em;color:var(--ink-3);text-transform:uppercase;}
+.seg{display:flex;border:1px solid var(--hair);background:var(--panel);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);}
+.seg button{appearance:none;border:0;background:none;font-family:var(--mono);cursor:pointer;
+  padding:8px 13px 7px;border-left:1px solid var(--hair-soft);color:var(--ink-2);
+  display:flex;flex-direction:column;align-items:center;gap:4px;transition:color .25s,background .25s;}
+.seg button:first-child{border-left:0;}
+.seg button .rn{font-size:12px;letter-spacing:.12em;}
+.seg button .nm{font-size:7.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3);}
+.seg button:hover{color:var(--ink);}
+.seg button.on{background:var(--ink);color:var(--paper);}
+.seg button.on .nm{color:rgba(232,229,222,.7);}
+
+/* ---------- fullscreen button ---------- */
+/* Hidden: the embedding page provides its own expand control, and the native
+   Fullscreen API is blocked inside the iframe — this inner button only peeked
+   out (light panel) from under the outer one. */
+.fsbtn{display:none !important;}
+.fsbtn--legacy{position:absolute;top:22px;right:24px;display:flex;align-items:center;gap:7px;
+  appearance:none;border:1px solid var(--hair);background:var(--panel);
+  backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);
+  font-family:var(--mono);color:var(--ink-2);cursor:pointer;padding:8px 11px;
+  font-size:9px;letter-spacing:.2em;text-transform:uppercase;transition:color .2s,background .2s;}
+.fsbtn:hover{color:var(--ink);}
+.fsbtn.on{background:var(--ink);color:var(--paper);border-color:var(--ink);}
+.fsbtn svg{width:13px;height:13px;display:block;stroke-linecap:square;}
+.compass{position:absolute;top:24px;left:50%;transform:translateX(-50%);
+  width:300px;height:34px;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,transparent,#000 16%,#000 84%,transparent);
+  mask-image:linear-gradient(90deg,transparent,#000 16%,#000 84%,transparent);}
+.compass .strip{position:absolute;top:0;left:0;height:100%;will-change:transform;}
+.compass .m{position:absolute;bottom:9px;width:1px;background:var(--hair-strong);transform:translateX(-50%);}
+.compass .m.mi{height:6px;background:var(--hair);}
+.compass .m.md{height:11px;}
+.compass .m .t{position:absolute;bottom:13px;left:50%;transform:translateX(-50%);
+  font-size:10px;letter-spacing:.1em;color:var(--ink);white-space:nowrap;}
+.compass .needle{position:absolute;top:0;left:50%;transform:translateX(-50%);
+  width:1px;height:20px;background:var(--accent);}
+.compass .needle::after{content:"";position:absolute;top:20px;left:50%;transform:translate(-50%,0) rotate(45deg);
+  width:5px;height:5px;background:var(--accent);}
+.compass .hd{position:absolute;bottom:-1px;left:50%;transform:translateX(-50%);font-size:9px;letter-spacing:.14em;color:var(--ink-2);}
+
+/* ---------- mode + hints ---------- */
+.statusbar{position:absolute;left:24px;bottom:22px;display:flex;flex-direction:column;gap:11px;max-width:330px;}
+.modeline{display:flex;align-items:center;gap:10px;}
+.modeline .dot{width:6px;height:6px;border:1px solid var(--ink);border-radius:50%;position:relative;}
+.modeline .dot::after{content:"";position:absolute;inset:1px;border-radius:50%;background:var(--accent);transform:scale(0);transition:transform .4s;}
+.modeline.imm .dot::after{transform:scale(1);}
+.modeline .txt{font-size:10px;letter-spacing:.24em;text-transform:uppercase;}
+.modeline .pct{font-size:9px;letter-spacing:.1em;color:var(--ink-3);margin-left:2px;}
+.hint-wrap{display:flex;align-items:flex-start;gap:10px;}
+.hint{font-size:10px;line-height:1.7;letter-spacing:.04em;color:var(--ink-2);
+  border-left:1px solid var(--hair-strong);padding-left:11px;max-width:330px;}
+.hint b{font-weight:600;color:var(--ink);}
+.hint .k{display:inline-block;border:1px solid var(--hair);padding:0 4px;border-radius:2px;font-size:9px;color:var(--ink);}
+.hint-hide,.hint-show{appearance:none;border:0;background:none;font-family:var(--mono);cursor:pointer;
+  color:var(--ink-3);font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;padding:2px 0;
+  white-space:nowrap;transition:color .2s;align-self:flex-start;}
+.hint-hide:hover,.hint-show:hover{color:var(--ink);}
+.hint-show{border:1px solid var(--hair);padding:5px 10px;border-radius:2px;background:var(--panel);
+  backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);}
+
+/* ---------- WIDGET I — vertical immersion slider ---------- */
+.w-slider{position:absolute;right:30px;top:50%;transform:translateY(-50%);
+  height:min(58vh,440px);display:flex;align-items:stretch;gap:14px;}
+.w-slider .scale{position:relative;width:46px;}
+.w-slider .track{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--hair-strong);transform:translateX(-50%);}
+.w-slider .ti{position:absolute;left:50%;height:1px;background:var(--hair);}
+.w-slider .ti.maj{width:18px;background:var(--hair-strong);}
+.w-slider .ti.min{width:9px;}
+.w-slider .ti{transform:translateX(-50%);}
+.w-slider .fill{position:absolute;left:50%;top:0;width:1px;background:var(--accent);transform:translateX(-50%);}
+.w-slider .knob{position:absolute;left:50%;width:30px;height:30px;transform:translate(-50%,-50%);
+  border:1px solid var(--ink);background:var(--panel);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);
+  cursor:grab;display:flex;align-items:center;justify-content:center;touch-action:none;}
+.w-slider .knob:active{cursor:grabbing;}
+.w-slider .knob::before{content:"";width:12px;height:1px;background:var(--ink);box-shadow:0 -3px var(--ink),0 3px var(--ink);}
+.w-slider .ends{display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;padding:2px 0;}
+.w-slider .ends .e{display:flex;flex-direction:column;gap:3px;}
+.w-slider .ends .e .n{font-size:9px;letter-spacing:.2em;text-transform:uppercase;font-weight:600;}
+.w-slider .ends .e .s{font-size:8px;letter-spacing:.14em;color:var(--ink-3);text-transform:uppercase;}
+
+/* ---------- WIDGET II — focus dial ---------- */
+.w-dial{position:absolute;right:30px;bottom:30px;width:148px;height:148px;touch-action:none;}
+.w-dial svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;}
+.w-dial .grip{cursor:grab;}
+.w-dial .grip:active{cursor:grabbing;}
+.w-dial .center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;pointer-events:none;}
+.w-dial .center .v{font-size:20px;letter-spacing:.04em;}
+.w-dial .center .m{font-size:8px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-3);}
+.w-dial .labtop{position:absolute;left:50%;top:-7px;transform:translateX(-50%);}
+.w-dial .endL{position:absolute;left:-4px;bottom:6px;}
+.w-dial .endR{position:absolute;right:-10px;bottom:6px;}
+
+/* ---------- WIDGET III — horizontal scale bar ---------- */
+.w-scale{position:absolute;left:50%;bottom:30px;transform:translateX(-50%);
+  width:min(70vw,560px);}
+.w-scale .ends{display:flex;justify-content:space-between;margin-bottom:10px;}
+.w-scale .ends .n{font-size:9px;letter-spacing:.2em;text-transform:uppercase;font-weight:600;}
+.w-scale .ends .n.r{text-align:right;}
+.w-scale .ends .n span{display:block;font-size:8px;letter-spacing:.14em;color:var(--ink-3);font-weight:400;margin-top:3px;}
+.w-scale .bar{position:relative;height:30px;cursor:pointer;touch-action:none;}
+.w-scale .base{position:absolute;left:0;right:0;top:0;height:1px;background:var(--hair-strong);}
+.w-scale .ti{position:absolute;top:0;width:1px;background:var(--hair);}
+.w-scale .ti.maj{height:11px;background:var(--hair-strong);}
+.w-scale .ti.min{height:6px;}
+.w-scale .fill{position:absolute;left:0;top:0;height:1px;background:var(--accent);}
+.w-scale .plumb{position:absolute;top:-6px;width:1px;height:24px;background:var(--accent);transform:translateX(-50%);}
+.w-scale .plumb .h{position:absolute;top:-12px;left:50%;transform:translate(-50%,0);
+  width:24px;height:12px;border:1px solid var(--ink);background:var(--panel);
+  backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);cursor:grab;display:flex;align-items:center;justify-content:center;}
+.w-scale .plumb .h::after{content:"";width:1px;height:6px;background:var(--ink);box-shadow:-3px 0 var(--ink),3px 0 var(--ink);}
+
+/* ---------- loading ---------- */
+.loader{position:absolute;inset:0;background:var(--paper);z-index:30;display:flex;
+  flex-direction:column;align-items:center;justify-content:center;gap:18px;transition:opacity .8s;}
+.loader.gone{opacity:0;pointer-events:none;}
+.loader .ld-t{font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:var(--ink-2);}
+.loader .ld-bar{width:200px;height:1px;background:var(--hair);position:relative;}
+.loader .ld-bar i{position:absolute;left:0;top:0;height:100%;width:0;background:var(--ink);transition:width .2s;}
+.loader .ld-p{font-size:9px;letter-spacing:.18em;color:var(--ink-3);}
+
+/* ---------- responsive: tablet ---------- */
+@media (max-width:900px){
+  .compass{width:230px;}
+  .w-slider{height:54vh;right:20px;}
+  .w-scale{width:80vw;}
+}
+/* ---------- responsive: phone ---------- */
+@media (max-width:620px){
+  .wordmark{top:14px;left:14px;}
+  .wordmark .a{font-size:11px;letter-spacing:.2em;}
+  .wordmark .b{font-size:8.5px;}
+  .rstyle{top:74px;left:14px;}
+  .rstyle .cap{display:none;}
+  /* slider is the default & best widget on phones — hide the comparison switcher */
+  .switcher{display:none;}
+  .fsbtn{top:14px;right:14px;padding:8px;}
+  .fsbtn span{display:none;}
+  .compass{top:16px;width:170px;}
+  .compass .hd{bottom:-2px;}
+  /* slider: comfortable touch target, clear of the top row */
+  .w-slider{height:50vh;right:14px;top:54%;gap:10px;}
+  .w-slider .ends .e .s{display:none;}
+  .w-slider .knob{width:38px;height:38px;}
+  .w-dial{right:16px;bottom:80px;width:128px;height:128px;}
+  .w-scale{width:90vw;bottom:24px;}
+  .statusbar{left:14px;bottom:16px;right:120px;max-width:none;}
+  .hint{font-size:9.5px;}
+  .hint .k{padding:1px 5px;}
+}
+@media (max-width:620px) and (orientation:landscape){
+  .w-slider{height:74vh;top:50%;}
+  .statusbar{right:160px;}
+}

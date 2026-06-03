@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Приход — Навигация</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="src/styles.css">
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+  "three-mesh-bvh": "https://unpkg.com/three-mesh-bvh@0.7.8/build/index.module.js"
+}}
+</script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="app">
+  <div class="loader" id="loader">
+    <div class="ld-t">Приход</div>
+    <div class="ld-bar"><i id="ldfill"></i></div>
+    <div class="ld-p" id="ldp">Загрузка модели — 0.0 МБ</div>
+  </div>
+</div>
+<div id="tweaks-root"></div>
+
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="src/tweaks.jsx"></script>
+
+<script type="module">
+import { RoomNav } from './src/nav.js';
+import { mountUI } from './src/ui.js';
+
+const app = document.getElementById('app');
+const loader = document.getElementById('loader');
+const ldfill = document.getElementById('ldfill');
+const ldp = document.getElementById('ldp');
+
+const nav = new RoomNav(app);
+mountUI(app, nav);
+
+nav.load('assets/room.glb', (p) => {
+  const mb = (p.loaded / 1048576);
+  const total = p.total ? (p.total / 1048576) : 4.4;
+  ldfill.style.width = Math.min(100, (mb / total) * 100) + '%';
+  ldp.textContent = `Загрузка модели — ${mb.toFixed(1)} МБ`;
+}).then(() => {
+  ldfill.style.width = '100%';
+  ldp.textContent = 'Готово';
+  nav.start();
+  loader.classList.add('gone');
+  setTimeout(() => { loader.style.display = 'none'; }, 850);
+}).catch((err) => {
+  ldp.textContent = 'Ошибка загрузки: ' + err;
+  console.error(err);
+});
+
+window.__nav = nav;
+</script>
+</body>
+</html>
