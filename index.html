@@ -526,7 +526,11 @@ section{padding:90px 0;position:relative;}
     track.appendChild(s);
   });
   function curIndex(){
-    const slides=[...track.children]; const c=track.scrollLeft + track.clientWidth/2;
+    const slides=[...track.children];
+    const maxScroll = track.scrollWidth - track.clientWidth;
+    if(track.scrollLeft <= 2) return 0;                       // pinned at start → first slide
+    if(track.scrollLeft >= maxScroll-2) return slides.length-1; // pinned at end → last slide
+    const c=track.scrollLeft + track.clientWidth/2;
     let best=0,bd=1e9;
     slides.forEach((s,i)=>{ const m=s.offsetLeft + s.offsetWidth/2; const d=Math.abs(m-c); if(d<bd){bd=d;best=i;} });
     return best;
