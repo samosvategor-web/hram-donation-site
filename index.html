@@ -109,9 +109,13 @@ section{padding:90px 0;position:relative;}
 .embed{margin:46px auto 0;max-width:980px;border:1px solid var(--border);background:#000;position:relative;overflow:hidden;}
 .embed .ratio{position:relative;width:100%;aspect-ratio:16/10;}
 .embed .ratio>iframe{position:absolute;inset:0;width:100%;height:100%;border:0;}
-/* pseudo-fullscreen (Fullscreen API is blocked inside the host frame) */
+/* pseudo-fullscreen fallback (when the native Fullscreen API is blocked, e.g. inside an embedding frame) */
 .embed.fs-on{position:fixed;inset:0;margin:0;max-width:none;border:0;z-index:9999;}
 .embed.fs-on .ratio{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto;}
+/* native fullscreen (real devices) — hides the browser's address bar / menu */
+.embed:fullscreen{width:100%;height:100%;max-width:none;margin:0;border:0;background:#000;}
+.embed:-webkit-full-screen{width:100%;height:100%;max-width:none;margin:0;border:0;background:#000;}
+.embed:fullscreen .ratio,.embed:-webkit-full-screen .ratio{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto;}
 .embed-fs{position:absolute;top:12px;right:12px;z-index:6;display:none;align-items:center;gap:8px;
   font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;cursor:pointer;
   background:rgba(20,16,10,.55);color:#fff;border:1px solid rgba(255,255,255,.35);
@@ -198,8 +202,8 @@ section{padding:90px 0;position:relative;}
 @media (max-width:700px){ .viz-grid{grid-template-columns:1fr;} }
 
 /* ---------- donate ---------- */
-.donate{background:var(--paper-2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
-.donate-frame{max-width:820px;margin:28px auto 0;}
+.donate{background:var(--paper-2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding-bottom:60px;}
+.donate-frame{max-width:820px;margin:24px auto 0;}
 .donate-frame iframe{width:100%;height:560px;border:0;display:block;background:transparent;overflow:hidden;}
 
 /* ---------- footer / paradise ---------- */
@@ -223,6 +227,31 @@ section{padding:90px 0;position:relative;}
 .reveal{opacity:0;transform:translateY(22px);transition:opacity .9s ease,transform .9s ease;}
 .reveal.show{opacity:1;transform:none;}
 @media (prefers-reduced-motion:reduce){ .reveal{opacity:1;transform:none;transition:none;} .song .line-text.in{animation-duration:0s;} }
+
+/* ---------- mobile refinements ---------- */
+@media (max-width:560px){
+  .wrap{padding:0 22px;}
+  section{padding:64px 0;}
+  /* hero: reclaim wasted vertical space, ensure CTA is reachable */
+  .hero{min-height:min(86vh,760px);}
+  .hero .caption{padding:104px 22px 40px;}
+  /* tap target ≥ 44px for the header donate button */
+  .nav a.give{padding:12px 16px;}
+  /* footer: stack & let the long parish name wrap (was the 11px h-overflow) */
+  .foot{padding:36px 22px;}
+  .foot .row{flex-direction:column;align-items:flex-start;gap:18px;}
+  .foot .meta{text-align:left;line-height:1.9;}
+  .foot .brand .nm{white-space:normal;}
+  /* paradise panorama: show the whole wide image (all four creatures) instead of cropping to the centre */
+  .paradise .band{height:auto;}
+  .paradise .band img{height:auto;object-fit:contain;}
+}
+/* landscape phones are very short — don't let the hero push the CTA off-screen */
+@media (orientation:landscape) and (max-height:540px){
+  .hero{min-height:0;}
+  .hero .caption{padding:92px 28px 32px;}
+  .hero h1{margin:10px 0 12px;}
+}
 </style>
 </head>
 <body>
@@ -378,7 +407,7 @@ section{padding:90px 0;position:relative;}
     <h2 class="sec reveal">Поддержать проект</h2>
     <p class="prose reveal">Любая лепта приближает воплощение храма и сада. Выберите сумму и оплатите по QR-коду или по реквизитам — пожертвование идёт напрямую на счёт прихода.</p>
     <div class="donate-frame reveal">
-      <iframe id="donateFrame" src="Пожертвование.html" title="Пожертвование" loading="lazy" scrolling="no"></iframe>
+      <iframe id="donateFrame" src="Пожертвование.html" title="Пожертвование" scrolling="no"></iframe>
     </div>
   </div>
 </section>
@@ -420,8 +449,21 @@ section{padding:90px 0;position:relative;}
   /* ---------- click-to-load embeds + pseudo-fullscreen ---------- */
   const FS_ENTER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5"/></svg>На весь экран';
   const FS_EXIT  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 4v5H4 M15 4v5h5 M9 20v-5H4 M15 20v-5h5"/></svg>Свернуть';
-  function exitFs(){ const el=document.querySelector('.embed.fs-on'); if(el){ el.classList.remove('fs-on'); const b=el.querySelector('.embed-fs'); if(b) b.innerHTML=FS_ENTER; document.body.style.overflow=''; } }
+  const fsElement = ()=> document.fullscreenElement || document.webkitFullscreenElement || null;
+  function exitPseudo(){ const el=document.querySelector('.embed.fs-on'); if(el){ el.classList.remove('fs-on'); const b=el.querySelector('.embed-fs'); if(b) b.innerHTML=FS_ENTER; } document.body.style.overflow=''; }
+  function exitFs(){
+    if(fsElement()){ const ex=document.exitFullscreen||document.webkitExitFullscreen; if(ex) ex.call(document); }
+    exitPseudo();
+  }
   document.addEventListener('keydown', e=>{ if(e.key==='Escape') exitFs(); });
+  // keep button label in sync when the native fullscreen state changes (incl. system back-gesture)
+  function syncFsBtn(){
+    const fe=fsElement();
+    document.querySelectorAll('.embed-fs').forEach(b=>{ const box=b.closest('.embed'); b.innerHTML=(fe===box)?FS_EXIT:FS_ENTER; });
+    if(!fe) document.body.style.overflow='';
+  }
+  document.addEventListener('fullscreenchange', syncFsBtn);
+  document.addEventListener('webkitfullscreenchange', syncFsBtn);
   document.querySelectorAll('.embed').forEach(box=>{
     const poster = box.querySelector('.poster');
     poster.addEventListener('click', ()=>{
@@ -435,9 +477,21 @@ section{padding:90px 0;position:relative;}
       const fsBtn = document.createElement('button');
       fsBtn.className = 'embed-fs'; fsBtn.innerHTML = FS_ENTER; fsBtn.style.display='flex';
       fsBtn.addEventListener('click', ()=>{
-        const on = box.classList.toggle('fs-on');
-        fsBtn.innerHTML = on ? FS_EXIT : FS_ENTER;
-        document.body.style.overflow = on ? 'hidden' : '';
+        // already open? close.
+        if(fsElement()===box || box.classList.contains('fs-on')){ exitFs(); return; }
+        // Try the REAL Fullscreen API first — this is what hides the mobile
+        // browser's address bar & menu (Yandex/Chrome/Safari) on real devices.
+        const req = box.requestFullscreen || box.webkitRequestFullscreen;
+        if(req){
+          try{
+            const p = req.call(box);
+            if(p && p.then){ p.then(()=>{ fsBtn.innerHTML=FS_EXIT; }).catch(()=>{ box.classList.add('fs-on'); fsBtn.innerHTML=FS_EXIT; document.body.style.overflow='hidden'; }); }
+            else { fsBtn.innerHTML=FS_EXIT; }
+            return;
+          }catch(e){}
+        }
+        // Fallback: CSS expand (used only where the native API is unavailable/blocked)
+        box.classList.add('fs-on'); fsBtn.innerHTML=FS_EXIT; document.body.style.overflow='hidden';
       });
       box.appendChild(fsBtn);
     });
@@ -546,15 +600,20 @@ section{padding:90px 0;position:relative;}
     try{
       const doc = frame.contentDocument || frame.contentWindow.document;
       if(!doc || !doc.body) return;
-      const h = Math.max(doc.body.scrollHeight, doc.documentElement.scrollHeight);
+      // Release the iframe height first so the document reports its TRUE content
+      // height (otherwise documentElement.scrollHeight is floored at the iframe's
+      // own height and the frame can never shrink → leftover empty space).
+      frame.style.height = '0px';
+      const h = doc.documentElement.scrollHeight || doc.body.scrollHeight;
       if(h) frame.style.height = h + 'px';
     }catch(e){}
   }
+  let roBusy = false;
   frame.addEventListener('load', ()=>{
     fit();
     try{
       const doc = frame.contentDocument || frame.contentWindow.document;
-      const ro = new ResizeObserver(fit);
+      const ro = new ResizeObserver(()=>{ if(roBusy) return; roBusy = true; fit(); requestAnimationFrame(()=>{ roBusy = false; }); });
       ro.observe(doc.body);
       doc.addEventListener('toggle', fit, true);
     }catch(e){}

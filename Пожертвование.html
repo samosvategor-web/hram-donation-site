@@ -27,7 +27,7 @@ body{display:flex;flex-direction:column;align-items:center;padding:4px 8px 8px;}
 
 .card{width:100%;max-width:720px;border:1px solid var(--hair);background:var(--panel);
   display:grid;grid-template-columns:1fr 300px;align-items:start;}
-.col{padding:26px;}
+.col{padding:26px;min-width:0;}
 .col.left{border-right:1px solid var(--hair-soft);}
 .col.right{display:flex;flex-direction:column;}
 .sect{font-size:10px;letter-spacing:.24em;text-transform:uppercase;color:var(--ink-3);margin-bottom:14px;}
@@ -52,7 +52,7 @@ body{display:flex;flex-direction:column;align-items:center;padding:4px 8px 8px;}
 /* QR */
 .qr-wrap{display:flex;flex-direction:column;align-items:center;}
 .qr-tile{background:var(--tile);border:1px solid var(--hair);padding:15px;line-height:0;}
-.qr-tile img{display:block;width:232px;height:232px;}
+.qr-tile img{display:block;width:232px;height:232px;max-width:100%;}
 .qr-sum{margin-top:15px;font-size:22px;letter-spacing:.02em;}
 .qr-cap{font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-3);margin-top:5px;}
 .save{margin-top:16px;width:100%;appearance:none;font-family:var(--mono);cursor:pointer;border:1px solid var(--ink);
@@ -99,6 +99,16 @@ details.cut .body{padding:2px 1px 16px;}
   .col.left{border-right:0;border-bottom:1px solid var(--hair-soft);}
   .col.right{order:-1;}
   .amounts{grid-template-columns:repeat(2,1fr);}
+}
+@media (max-width:440px){
+  .head{padding:0 2px;}
+  .col{padding:18px 16px;}
+  .qr-tile{padding:11px;}
+  .qr-tile img{width:min(232px,70vw);height:auto;aspect-ratio:1/1;}
+  .amounts{gap:7px;}
+  .amt{padding:11px 3px 9px;}
+  .amt .v{font-size:14px;}
+  .rrow{grid-template-columns:64px 1fr;gap:8px;}
 }
 </style>
 </head>

@@ -108,7 +108,7 @@ export function mountUI(container, nav, uiOpts = {}) {
     walk: `<b>Коснитесь ${G.acc === 'пол' ? 'пола' : 'земли'}</b> — идти · <b>проведите</b> — осмотреться · <b>двойное касание</b> — выйти`,
   } : {
     orbit: `<b>Тяните</b> — повернуть · <span class="k">Shift</span> или правая кнопка — сдвинуть · <b>двойной клик</b> по ${G.dat} — войти`,
-    walk: `<span class="k">W</span><span class="k">A</span><span class="k">S</span><span class="k">D</span> — идти · <span class="k">←</span><span class="k">→</span> — повернуть · <b>Тяните</b> — осмотреться · <b>двойной клик</b> — выйти`,
+    walk: `<span class="k">W</span><span class="k">A</span><span class="k">S</span><span class="k">D</span> или <b>клик</b> по ${G.dat} — идти · <span class="k">←</span><span class="k">→</span> — повернуть · <b>Тяните</b> — осмотреться · <b>двойной клик</b> — выйти`,
   };
   // instructions stay visible by default; user can hide (preference persists)
   let hintHidden = false;

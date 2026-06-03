@@ -182,12 +182,12 @@ html,body{margin:0;height:100%;background:var(--paper);overflow:hidden;
   .switcher{display:none;}
   .fsbtn{top:14px;right:14px;padding:8px;}
   .fsbtn span{display:none;}
-  .compass{top:16px;width:170px;}
+  .compass{top:62px;width:160px;}
   .compass .hd{bottom:-2px;}
   /* slider: comfortable touch target, clear of the top row */
   .w-slider{height:50vh;right:14px;top:54%;gap:10px;}
   .w-slider .ends .e .s{display:none;}
-  .w-slider .knob{width:38px;height:38px;}
+  .w-slider .knob{width:44px;height:44px;}
   .w-dial{right:16px;bottom:80px;width:128px;height:128px;}
   .w-scale{width:90vw;bottom:24px;}
   .statusbar{left:14px;bottom:16px;right:120px;max-width:none;}

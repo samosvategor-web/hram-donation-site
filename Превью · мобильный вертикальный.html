@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Превью · мобильный (вертикальный)</title>
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;background:#2c2b28;color:#cdbfa4;
+    font-family:'JetBrains Mono','SFMono-Regular',ui-monospace,monospace;}
+  .stage{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:26px 16px;}
+  .cap{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:#8c7d63;text-align:center;}
+  .cap b{color:#e8ddc4;font-weight:600;}
+  /* iPhone-ish portrait bezel: 390 x 844 device px */
+  .device{
+    --w:390px; --h:844px;
+    position:relative;width:var(--w);height:var(--h);
+    background:#0b0b0d;border-radius:48px;padding:13px;
+    box-shadow:0 30px 80px rgba(0,0,0,.5), inset 0 0 0 2px #26262a;
+    transform-origin:center center;
+  }
+  .screen{position:relative;width:100%;height:100%;border-radius:36px;overflow:hidden;background:#f1e9da;}
+  .screen iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;}
+  /* notch / camera island on the short side (top in portrait) */
+  .island{position:absolute;left:50%;top:5px;transform:translateX(-50%);height:9px;width:74px;
+    background:#0b0b0d;border-radius:6px;z-index:5;pointer-events:none;}
+  .hint{font-size:10px;letter-spacing:.14em;color:#7c7058;text-align:center;max-width:420px;line-height:1.7;}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="cap"><b>Храм Ксении · ЗИЛАРТ</b> — мобильный, книжная ориентация (390 × 844)</div>
+  <div class="device" id="device">
+    <div class="screen">
+      <span class="island"></span>
+      <iframe id="frame" src="./index.html"></iframe>
+    </div>
+  </div>
+  <div class="hint">Прокручивайте внутри экрана. Это реальная страница в раскладке вертикального телефона — медиазапросы срабатывают по ширине 390px.</div>
+</div>
+<script>
+  const device = document.getElementById('device');
+  const DW = 390 + 26, DH = 844 + 26;
+  function fit(){
+    const availW = window.innerWidth - 32;
+    const availH = window.innerHeight - 150;
+    const s = Math.min(1, availW/DW, availH/DH);
+    device.style.transform = 'scale(' + s.toFixed(3) + ')';
+  }
+  fit(); window.addEventListener('resize', fit);
+</script>
+</body>
+</html>
