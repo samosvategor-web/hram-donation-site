@@ -610,20 +610,22 @@ section{padding:90px 0;position:relative;}
     try{
       const doc = frame.contentDocument || frame.contentWindow.document;
       if(!doc || !doc.body) return;
-      // Release the iframe height first so the document reports its TRUE content
-      // height (otherwise documentElement.scrollHeight is floored at the iframe's
-      // own height and the frame can never shrink → leftover empty space).
-      frame.style.height = '0px';
-      const h = doc.documentElement.scrollHeight || doc.body.scrollHeight;
-      if(h) frame.style.height = h + 'px';
+      // Measure the donate page's TRUE content height directly from its body box.
+      // The body is a content-sized flex column (no min-height:100%), so its
+      // bounding height is accurate regardless of the iframe's current height —
+      // NO need to collapse the frame to 0px first. Collapsing caused mobile
+      // browsers (Yandex) to re-anchor scroll to the section top when <details>
+      // expanded. We also only write when the height actually changed, to avoid
+      // ResizeObserver feedback loops.
+      const h = Math.ceil(doc.body.getBoundingClientRect().height);
+      if(h && Math.abs(h - frame.offsetHeight) > 1) frame.style.height = h + 'px';
     }catch(e){}
   }
-  let roBusy = false;
   frame.addEventListener('load', ()=>{
     fit();
     try{
       const doc = frame.contentDocument || frame.contentWindow.document;
-      const ro = new ResizeObserver(()=>{ if(roBusy) return; roBusy = true; fit(); requestAnimationFrame(()=>{ roBusy = false; }); });
+      const ro = new ResizeObserver(fit);
       ro.observe(doc.body);
       doc.addEventListener('toggle', fit, true);
     }catch(e){}
