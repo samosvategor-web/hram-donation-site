@@ -226,6 +226,37 @@ section{padding:90px 0;position:relative;}
 .foot .meta{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:#8c7d63;text-align:right;line-height:2;}
 .foot a{color:var(--gold-light);text-decoration:none;}
 
+/* ---------- lightbox (click photo → fullscreen) ---------- */
+.slide img,.viz-grid figure{cursor:zoom-in;}
+.lightbox{position:fixed;inset:0;z-index:10050;display:none;align-items:center;justify-content:center;
+  background:rgba(16,12,7,.92);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  opacity:0;transition:opacity .3s ease;}
+.lightbox.open{display:flex;opacity:1;}
+.lightbox .lb-stage{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center;padding:5vh 6vw;}
+.lightbox img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;cursor:zoom-out;
+  box-shadow:0 24px 70px rgba(0,0,0,.6);transform:scale(.97);transition:transform .3s ease;}
+.lightbox.open img{transform:scale(1);}
+.lb-cap{position:absolute;left:0;right:0;bottom:max(18px,3vh);text-align:center;
+  font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:rgba(241,233,218,.82);
+  display:flex;gap:16px;align-items:center;justify-content:center;pointer-events:none;}
+.lb-cap .idx{color:var(--gold-light);}
+.lb-btn{position:absolute;display:flex;align-items:center;justify-content:center;cursor:pointer;
+  border:1px solid rgba(241,233,218,.32);background:rgba(20,16,10,.5);color:#f1e9da;
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);transition:background .2s,transform .2s;}
+.lb-btn:hover{background:rgba(20,16,10,.85);border-color:var(--gold-light);}
+.lb-close{top:max(16px,2.5vh);right:max(16px,2.5vw);width:48px;height:48px;border-radius:50%;}
+.lb-close:hover{transform:rotate(90deg);}
+.lb-close svg{width:18px;height:18px;}
+.lb-nav{top:50%;transform:translateY(-50%);width:54px;height:54px;border-radius:50%;}
+.lb-nav:hover{transform:translateY(-50%) scale(1.06);}
+.lb-prev{left:max(14px,2vw);}
+.lb-next{right:max(14px,2vw);}
+.lb-nav svg{width:20px;height:20px;}
+@media (max-width:560px){
+  .lightbox .lb-stage{padding:8vh 4vw;}
+  .lb-nav{width:46px;height:46px;}
+}
+
 /* reveal on scroll */
 .reveal{opacity:0;transform:translateY(22px);transition:opacity .9s ease,transform .9s ease;}
 .reveal.show{opacity:1;transform:none;}
@@ -258,6 +289,17 @@ section{padding:90px 0;position:relative;}
 </style>
 </head>
 <body>
+
+<!-- ===== lightbox (click photo → fullscreen) ===== -->
+<div class="lightbox" id="lightbox" aria-hidden="true">
+  <div class="lb-stage">
+    <img id="lbImg" alt="">
+  </div>
+  <button class="lb-btn lb-close" id="lbClose" aria-label="Закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  <button class="lb-btn lb-nav lb-prev" id="lbPrev" aria-label="Предыдущее фото"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M15 5l-7 7 7 7"/></svg></button>
+  <button class="lb-btn lb-nav lb-next" id="lbNext" aria-label="Следующее фото"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 5l7 7-7 7"/></svg></button>
+  <div class="lb-cap"><span class="t" id="lbTitle"></span><span class="idx" id="lbIdx"></span></div>
+</div>
 
 <!-- ===== top bar ===== -->
 <div class="topbar">
@@ -449,6 +491,51 @@ section{padding:90px 0;position:relative;}
   }, { threshold:.12 });
   document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
 
+  /* ---------- lightbox: click any photo → fullscreen, arrows to browse ---------- */
+  const lb = document.getElementById('lightbox');
+  const lbImg = document.getElementById('lbImg');
+  const lbTitle = document.getElementById('lbTitle');
+  const lbIdx = document.getElementById('lbIdx');
+  let lbList = [], lbPos = 0;
+  function lbRender(){
+    const it = lbList[lbPos]; if(!it) return;
+    lbImg.src = it.src; lbImg.alt = it.title || '';
+    lbTitle.textContent = it.title || '';
+    lbIdx.textContent = lbList.length>1 ? String(lbPos+1).padStart(2,'0')+' / '+String(lbList.length).padStart(2,'0') : '';
+    const multi = lbList.length>1;
+    document.getElementById('lbPrev').style.display = multi?'flex':'none';
+    document.getElementById('lbNext').style.display = multi?'flex':'none';
+  }
+  function lbOpen(list,pos){
+    lbList=list; lbPos=pos; lbRender();
+    lb.classList.add('open'); lb.setAttribute('aria-hidden','false');
+    document.body.style.overflow='hidden';
+  }
+  function lbClose(){
+    lb.classList.remove('open'); lb.setAttribute('aria-hidden','true');
+    document.body.style.overflow=''; lbImg.removeAttribute('src');
+  }
+  function lbStep(d){ lbPos=(lbPos+d+lbList.length)%lbList.length; lbRender(); }
+  window.__openLightbox = lbOpen;
+  document.getElementById('lbClose').addEventListener('click', lbClose);
+  document.getElementById('lbPrev').addEventListener('click', e=>{ e.stopPropagation(); lbStep(-1); });
+  document.getElementById('lbNext').addEventListener('click', e=>{ e.stopPropagation(); lbStep(1); });
+  lb.addEventListener('click', e=>{ if(e.target===lb || e.target.classList.contains('lb-stage') || e.target===lbImg) lbClose(); });
+  document.addEventListener('keydown', e=>{
+    if(!lb.classList.contains('open')) return;
+    if(e.key==='Escape') lbClose();
+    else if(e.key==='ArrowLeft' && lbList.length>1) lbStep(-1);
+    else if(e.key==='ArrowRight' && lbList.length>1) lbStep(1);
+  });
+  // swipe on touch
+  let lbSx=0;
+  lb.addEventListener('touchstart', e=>{ lbSx=e.touches[0].clientX; }, {passive:true});
+  lb.addEventListener('touchend', e=>{
+    if(lbList.length<2) return;
+    const dx=e.changedTouches[0].clientX-lbSx;
+    if(Math.abs(dx)>50) lbStep(dx<0?1:-1);
+  }, {passive:true});
+
   /* ---------- play → launch tour as a fullscreen "app", ✕ to quit ---------- */
   const fsElement = ()=> document.fullscreenElement || document.webkitFullscreenElement || null;
   const CLOSE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 6l12 12M18 6L6 18"/></svg>';
@@ -523,10 +610,15 @@ section{padding:90px 0;position:relative;}
   ];
   const track = document.getElementById('carTrack');
   const countEl = document.getElementById('carCount');
+  const carImages = SLIDES.map(([file,title])=>({ src:`assets/site/parish/${file}.jpg`, title }));
   SLIDES.forEach(([file,title],i)=>{
     const s = document.createElement('div'); s.className='slide';
     s.innerHTML = `<img src="assets/site/parish/${file}.jpg" alt="${title}" loading="lazy">
       <div class="cap"><span class="t">${title}</span><span class="i">${String(i+1).padStart(2,'0')}</span></div>`;
+    s.querySelector('img').addEventListener('click', ()=>{
+      if(moved>8) return;            // ignore clicks that were really drags
+      window.__openLightbox(carImages, i);
+    });
     track.appendChild(s);
   });
   function curIndex(){
@@ -553,6 +645,14 @@ section{padding:90px 0;position:relative;}
   addEventListener('pointermove',e=>{ if(!down)return; const dx=e.clientX-sx; moved+=Math.abs(dx); track.scrollLeft=sl-dx; });
   addEventListener('pointerup',()=>{ if(down){down=false;track.classList.remove('drag');updateCount();} });
   updateCount();
+
+  /* ---------- landscaping visualizations → lightbox ---------- */
+  const vizFigs = [...document.querySelectorAll('.viz-grid figure')];
+  const vizImages = vizFigs.map(f=>({
+    src: f.querySelector('img').getAttribute('src'),
+    title: (f.querySelector('figcaption')?.textContent || '').trim()
+  }));
+  vizFigs.forEach((f,i)=> f.addEventListener('click', ()=> window.__openLightbox(vizImages, i)) );
 })();
 
 /* ============================================================
