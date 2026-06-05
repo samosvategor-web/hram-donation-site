@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Благоустройство — Навигация (LOD)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="src/styles.css">
+<style>
+/* ---- LOD streaming badge: quietly reports detail chunks arriving ---- */
+#stream{
+  position:fixed;top:14px;left:50%;transform:translateX(-50%) translateY(-8px);
+  z-index:30;display:flex;align-items:center;gap:10px;pointer-events:none;
+  padding:7px 13px;border-radius:999px;
+  background:rgba(20,16,10,.62);border:1px solid rgba(241,233,218,.22);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10px;letter-spacing:.14em;
+  text-transform:uppercase;color:#f1e9da;
+  opacity:0;transition:opacity .4s ease,transform .4s ease;
+}
+#stream.on{opacity:1;transform:translateX(-50%) translateY(0);}
+#stream .dot{width:6px;height:6px;border-radius:50%;background:#c8a85f;box-shadow:0 0 8px #c8a85f;}
+#stream.busy .dot{animation:streamPulse 1s ease-in-out infinite;}
+#stream .lbl{color:rgba(241,233,218,.66);}
+#stream .ct{color:#f1e9da;font-weight:600;}
+@keyframes streamPulse{0%,100%{opacity:.35;}50%{opacity:1;}}
+@media (prefers-reduced-motion:reduce){#stream.busy .dot{animation:none;}}
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+  "three-mesh-bvh": "https://unpkg.com/three-mesh-bvh@0.7.8/build/index.module.js"
+}}
+</script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="app">
+  <div class="loader" id="loader">
+    <div class="ld-t">Благоустройство</div>
+    <div class="ld-bar"><i id="ldfill"></i></div>
+    <div class="ld-p" id="ldp">Загрузка территории — 0.0 МБ</div>
+  </div>
+</div>
+
+<!-- LOD streaming status -->
+<div id="stream">
+  <span class="dot"></span>
+  <span class="lbl">Детализация</span>
+  <span class="ct" id="streamCt">0 / 4</span>
+</div>
+
+<div id="tweaks-root"></div>
+
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="src/tweaks.jsx"></script>
+
+<script type="module">
+import { RoomNav } from './src/nav.js';
+import { mountUI } from './src/ui.js';
+
+const app = document.getElementById('app');
+const loader = document.getElementById('loader');
+const ldfill = document.getElementById('ldfill');
+const ldp = document.getElementById('ldp');
+
+// Exterior site model: larger scale, terrain follow, framed lower than a spire.
+const nav = new RoomNav(app, {
+  groundFollow: true,
+  walkSpeed: 10,
+  orbitTargetFrac: 0.22,
+  r0Scale: 0.82,
+  azDeg: -40,
+  eyeHeight: 1.62,
+  near: 0.3,
+  colorSun: true,
+  sunAzDeg: 35,
+  sunElevDeg: 42,
+  sunIntensity: 2.0,
+});
+mountUI(app, nav, {
+  title: 'Благоустройство',
+  subtitle: 'Территория храма — навигация (LOD)',
+  groundWord: { dat: 'земле', acc: 'земля' },
+  fixedRenderStyle: 'material',
+});
+
+const DIR = 'assets/grounds-lod/';
+
+// ---- always-on core: ground + vegetation (~38 МБ, meshopt + KTX2) ----
+nav.loadCore([DIR + 'site.glb', DIR + 'vegetation.glb'], (p) => {
+  const mb = p.loaded / 1048576;
+  const total = p.total ? p.total / 1048576 : 38.7;
+  ldfill.style.width = Math.min(100, (mb / total) * 100) + '%';
+  ldp.textContent = `Загрузка территории — ${mb.toFixed(1)} МБ`;
+}).then(() => {
+  ldfill.style.width = '100%';
+  ldp.textContent = 'Готово';
+  nav.start();
+  loader.classList.add('gone');
+  setTimeout(() => { loader.style.display = 'none'; }, 850);
+
+  // ---- stream the heavy sculptures by proximity, nearest-first, one at a time.
+  //      Each is its own file (quantisation tied to its bbox — never merged). ----
+  const streamEl = document.getElementById('stream');
+  const streamCt = document.getElementById('streamCt');
+  nav.streamItems([
+    { name: 'Лев',        url: DIR + 'lion.glb',   center: [-3.3, 0.7, -14.1] },
+    { name: 'Орёл',       url: DIR + 'eagle.glb',  center: [-7.0, 1.4, -14.7] },
+    { name: 'Навершие',   url: DIR + 'angel.glb',  center: [5.6, 1.2, -13.2] },
+    { name: 'Св. Ксения', url: DIR + 'ksenia.glb', center: [-29.8, 1.1, -17.0] },
+  ], {
+    // radius: 45,  // ← uncomment to only stream sculptures near the camera
+    onChange: ({ done, total, loading }) => {
+      streamEl.classList.add('on');
+      streamEl.classList.toggle('busy', !!loading);
+      streamCt.textContent = `${done} / ${total}`;
+      if (done >= total) {
+        setTimeout(() => streamEl.classList.remove('on'), 1400);
+      }
+    },
+  });
+}).catch((err) => {
+  ldp.textContent = 'Ошибка загрузки: ' + err;
+  console.error(err);
+});
+
+window.__nav = nav;
+</script>
+</body>
+</html>

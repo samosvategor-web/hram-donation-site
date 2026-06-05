@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { SketchPass } from './sketch.js';
@@ -130,76 +131,187 @@ export class RoomNav {
     this._loop = this._loop.bind(this);
   }
 
+  // Build a GLTFLoader wired with the decoders a given asset family needs.
+  //   draco — gstatic DRACO decoder (legacy single-file exports)
+  //   ktx2  — KTX2/Basis transcoder (LOD streaming assets; needs the renderer)
+  // Meshopt is always enabled (cheap, used by every export here).
+  _makeLoader({ draco = false, ktx2 = false } = {}) {
+    const loader = new GLTFLoader();
+    loader.setMeshoptDecoder(MeshoptDecoder);
+    if (draco) {
+      const d = new DRACOLoader();
+      d.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+      loader.setDRACOLoader(d);
+    }
+    if (ktx2) {
+      const k = new KTX2Loader()
+        .setTranscoderPath('https://unpkg.com/three@0.160.0/examples/jsm/libs/basis/')
+        .detectSupport(this.renderer);   // renderer already exists
+      loader.setKTX2Loader(k);
+    }
+    return loader;
+  }
+
+  // Process a freshly-loaded root: bake transforms, build BVH, register colliders,
+  // and apply the CURRENT render style (so chunks streamed in after the user has
+  // switched to "colour" keep their authored materials instead of going plaster).
+  _ingestRoot(root) {
+    this.scene.add(root);
+    root.updateMatrixWorld(true);       // bake node translations before reading AABBs
+    const useOrig = this.renderStyle === 'material';
+    root.traverse((o) => {
+      if (!o.isMesh) return;
+      o.frustumCulled = false;          // critical: bad bounding spheres else cull these
+      o.geometry.computeBoundingBox();
+      o.geometry.computeBoundsTree();   // BVH for fast collision raycasts
+      const b = o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld);
+      this.colliders.push(o);
+      const m = o.material;
+      o.userData.origMat = m;           // remember authored material for the "colour" mode
+      if (m) m.envMapIntensity = 1.35;  // lift dark authored materials via IBL
+      // large flat low slabs = ground/plaza → push back in depth so coplanar
+      // markings/paths stop z-fighting (visible in colour mode)
+      const sx = b.max.x - b.min.x, sy = b.max.y - b.min.y, sz = b.max.z - b.min.z;
+      if (m && sy < 1.5 && Math.max(sx, sz) > 25) {
+        m.polygonOffset = true; m.polygonOffsetFactor = 1.5; m.polygonOffsetUnits = 2;
+      }
+      // keep alpha-cutout foliage & glass as authored; plaster the solid rest
+      const keep = m && (m.transmission > 0 || m.alphaTest > 0 || m.transparent);
+      if (keep) m.side = THREE.DoubleSide;
+      else if (!useOrig) o.material = this.plaster;   // uniform gypsum surface
+    });
+  }
+
+  // Recompute framing from every collider currently in the scene: AABB, orbit
+  // radius, walk bounds, and the floor height under the centre. Called once after
+  // the core model(s) load — NOT per streamed sculpture (which sit inside the site
+  // footprint and must not shift the camera/floor that the site already defined).
+  _recomputeBounds() {
+    const box = new THREE.Box3(), b = new THREE.Box3();
+    for (const o of this.colliders) {
+      if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+      b.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld);
+      box.union(b);
+    }
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    this.center.copy(center);
+    this.bbox = box;
+    this._updateSun();   // re-aim sun at the true model centre
+    const radius = size.length() / 2;
+    this.R0 = Math.max(size.x, size.z) * (this.opts.r0Scale ?? 1.18);   // frame the footprint
+    this.modelRadius = radius;
+    this.camera.far = Math.max(400, this.R0 * 4); // avoid clipping large sites
+    this.camera.updateProjectionMatrix();
+    this.orbitTargetY = box.min.y + size.y * this.orbitTargetFrac;
+    const pad = 2.2;
+    this.walkBounds = {
+      minX: box.min.x + pad, maxX: box.max.x - pad,
+      minZ: box.min.z + pad, maxZ: box.max.z - pad,
+    };
+    this.walkX = center.x; this.walkZ = center.z;
+    // find floor by ray-casting straight down at the centre
+    this._ray.set(new THREE.Vector3(center.x, box.max.y + 5, center.z), new THREE.Vector3(0, -1, 0));
+    const hits = this._ray.intersectObjects(this.colliders, true);
+    let floorY;
+    if (hits.length) {
+      floorY = this.groundFollow ? hits[hits.length - 1].point.y
+                                  : hits[hits.length > 1 ? Math.floor(hits.length / 2) : 0].point.y;
+    } else floorY = box.min.y + 0.5;
+    this.eyeY = floorY + this.eyeHeight;
+    this.baseEyeY = this.eyeY;
+    this.groundY = floorY;
+    return { box, center, size };
+  }
+
+  // Single-file load (room / legacy grounds exports — meshopt + optional DRACO).
   load(url, onProgress) {
     return new Promise((resolve, reject) => {
-      const draco = new DRACOLoader();
-      draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
-      const loader = new GLTFLoader();
-      loader.setDRACOLoader(draco);
-      loader.setMeshoptDecoder(MeshoptDecoder);
+      const loader = this._makeLoader({ draco: true });
       loader.load(url, (gltf) => {
-        const root = gltf.scene;
-        this.scene.add(root);
-        root.updateMatrixWorld(true);   // ensure node translations are baked before reading AABBs
-        const box = new THREE.Box3();
-        root.traverse((o) => {
-          if (o.isMesh) {
-            o.frustumCulled = false;            // critical: bad bounding spheres else cull these
-            o.geometry.computeBoundingBox();
-            o.geometry.computeBoundsTree();   // BVH for fast collision raycasts
-            const b = o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld);
-            box.union(b);
-            this.colliders.push(o);
-            const m = o.material;
-            o.userData.origMat = m;   // remember authored material for the "colour" mode
-            if (m) m.envMapIntensity = 1.35;   // lift dark authored materials via IBL
-            // large flat low slabs = ground/plaza → push them back in depth so
-            // coplanar markings/paths stop z-fighting (visible in colour mode)
-            const sx = b.max.x - b.min.x, sy = b.max.y - b.min.y, sz = b.max.z - b.min.z;
-            if (m && sy < 1.5 && Math.max(sx, sz) > 25) {
-              m.polygonOffset = true; m.polygonOffsetFactor = 1.5; m.polygonOffsetUnits = 2;
-            }
-            // keep alpha-cutout foliage & glass as authored; plaster the solid rest
-            const keep = m && (m.transmission > 0 || m.alphaTest > 0 || m.transparent);
-            if (keep) m.side = THREE.DoubleSide;
-            else o.material = this.plaster;   // uniform gypsum surface (default)
-          }
-        });
-        const size = box.getSize(new THREE.Vector3());
-        const center = box.getCenter(new THREE.Vector3());
-        this.center.copy(center);
-        this.bbox = box;
-        this._updateSun();   // re-aim sun at the true model centre
-        const radius = size.length() / 2;
-        this.R0 = Math.max(size.x, size.z) * (this.opts.r0Scale ?? 1.18);   // frame the footprint
-        this.modelRadius = radius;
-        this.camera.far = Math.max(400, this.R0 * 4); // avoid clipping large sites
-        this.camera.updateProjectionMatrix();
-        this.orbitTargetY = box.min.y + size.y * this.orbitTargetFrac;
-        // walk bounds: inset from outer shell
-        const pad = 2.2;
-        this.walkBounds = {
-          minX: box.min.x + pad, maxX: box.max.x - pad,
-          minZ: box.min.z + pad, maxZ: box.max.z - pad,
-        };
-        this.walkX = center.x; this.walkZ = center.z;
-        // find floor by ray-casting straight down at the centre
-        this._ray.set(new THREE.Vector3(center.x, box.max.y + 5, center.z), new THREE.Vector3(0, -1, 0));
-        const hits = this._ray.intersectObjects(this.colliders, true);
-        let floorY;
-        if (hits.length) {
-          // ground-follow models: take the LOWEST hit (ignore roofs/canopy above)
-          floorY = this.groundFollow ? hits[hits.length - 1].point.y
-                                      : hits[hits.length > 1 ? Math.floor(hits.length / 2) : 0].point.y;
-        } else floorY = box.min.y + 0.5;
-        this.eyeY = floorY + this.eyeHeight;
-        this.baseEyeY = this.eyeY;
-        this.groundY = floorY;
+        this._ingestRoot(gltf.scene);
+        const r = this._recomputeBounds();
         this.ready = true;
         this._apply(0);
         this.readyCbs.forEach((cb) => cb());
-        resolve({ box, center, size });
+        resolve(r);
       }, onProgress, reject);
+    });
+  }
+
+  // LOD core: load the always-on chunks (site + vegetation, meshopt + KTX2) in
+  // parallel, ingest each at identity transform, then frame once. onProgress gets
+  // the summed { loaded, total } across all core files.
+  loadCore(urls, onProgress) {
+    const loader = this._makeLoader({ ktx2: true });
+    const prog = urls.map(() => ({ loaded: 0, total: 0 }));
+    const emit = () => {
+      if (!onProgress) return;
+      let loaded = 0, total = 0;
+      for (const p of prog) { loaded += p.loaded; total += p.total; }
+      onProgress({ loaded, total });
+    };
+    return Promise.all(urls.map((url, i) => new Promise((res, rej) => {
+      loader.load(url, (gltf) => { this._ingestRoot(gltf.scene); res(); },
+        (e) => { prog[i] = { loaded: e.loaded || 0, total: e.total || 0 }; emit(); }, rej);
+    }))).then(() => {
+      const r = this._recomputeBounds();
+      this.ready = true;
+      this._apply(0);
+      this.readyCbs.forEach((cb) => cb());
+      return r;
+    });
+  }
+
+  // LOD streaming: queue heavy detail chunks (sculptures) to load by proximity to
+  // the camera focus — nearest first, one at a time, each appearing as it arrives.
+  //   items: [{ url, name, center:[x,y,z] }]
+  //   opts.radius — only stream items within this distance of the focus (default ∞,
+  //                 i.e. stream them all, nearest-first); opts.onChange(state) fires
+  //                 on every status change with { done, total, loading, items }.
+  streamItems(items, opts = {}) {
+    this._stream = items.map((it) => ({
+      url: it.url, name: it.name || it.url,
+      center: new THREE.Vector3(it.center[0], it.center[1], it.center[2]),
+      status: 'idle',
+    }));
+    this._streamLoader = this._makeLoader({ ktx2: true });
+    this._streamRadius = opts.radius ?? Infinity;
+    this._streamCb = opts.onChange || null;
+    this._streamBusy = false;
+    this._streamT = 0;
+    this._emitStream();
+  }
+  _emitStream() {
+    if (!this._streamCb) return;
+    const done = this._stream.filter((s) => s.status === 'done').length;
+    const loading = this._stream.find((s) => s.status === 'loading');
+    this._streamCb({ done, total: this._stream.length, loading: loading ? loading.name : null, items: this._stream });
+  }
+  _streamTick() {
+    if (!this._stream || this._streamBusy) return;
+    // pick the nearest still-idle item within the streaming radius of the focus
+    const fx = this.walkX, fz = this.walkZ;
+    let best = null, bd = Infinity;
+    for (const s of this._stream) {
+      if (s.status !== 'idle') continue;
+      const d = Math.hypot(s.center.x - fx, s.center.z - fz);
+      if (d <= this._streamRadius && d < bd) { bd = d; best = s; }
+    }
+    if (!best) return;
+    best.status = 'loading';
+    this._streamBusy = true;
+    this._emitStream();
+    this._streamLoader.load(best.url, (gltf) => {
+      this._ingestRoot(gltf.scene);     // applies current render style; sits at identity
+      best.status = 'done';
+      this._streamBusy = false;
+      this._emitStream();
+    }, undefined, (err) => {
+      console.error('LOD stream failed:', best.url, err);
+      best.status = 'idle';             // let it retry on a later tick
+      this._streamBusy = false;
+      this._emitStream();
     });
   }
 
@@ -588,6 +700,9 @@ export class RoomNav {
     this.imm = expSmooth(this.imm, this.targetImm, dt, 5.5);
     if (this.imm < 0.0015) this.imm = 0;
     const s = smooth(this.imm);
+
+    // LOD streaming: poll proximity a few times a second (cheap; loads one at a time)
+    if (this._stream) { this._streamT += dt; if (this._streamT > 0.35) { this._streamT = 0; this._streamTick(); } }
 
     const prevMode = this.mode;
     this.mode = this.imm > 0.8 ? 'walk' : 'orbit';

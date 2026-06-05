@@ -3,7 +3,7 @@
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "autoRotate": true,
   "rotateSpeed": 30,
-  "walkSpeed": 6,
+  "walkSpeed": 10,
   "lookSens": 100,
   "fov": 48,
   "eyeCm": 0,
@@ -18,6 +18,10 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "accent": "#1f4f86",
   "paper": "#e8e5de"
 }/*EDITMODE-END*/;
+
+// Per-page overrides: a widget can set window.TWEAK_OVERRIDES before this script
+// loads to change defaults just for itself (e.g. the interior keeps walkSpeed 6).
+const TWEAK_BASE = Object.assign({}, TWEAK_DEFAULTS, window.TWEAK_OVERRIDES || {});
 
 function applyTweaks(t) {
   const r = document.documentElement;
@@ -45,7 +49,7 @@ function applyTweaks(t) {
 }
 
 function App() {
-  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [t, setTweak] = useTweaks(TWEAK_BASE);
   const [hasSun, setHasSun] = React.useState(false);
   React.useEffect(() => { applyTweaks(t); }, [t]);
   // model loads async — keep trying until nav is ready, then apply once
