@@ -101,6 +101,10 @@ nav.loadCore([DIR + 'site.glb', DIR + 'vegetation.glb'], (p) => {
 }).then(() => {
   ldfill.style.width = '100%';
   ldp.textContent = 'Готово';
+  // Remove the stray single-sided "image plane" wall (IMG_5699) so the passage
+  // by the staircase is walk-through (it blocked from one side, vanished from the
+  // other — a one-sided baked photo plane in the source model).
+  nav.removeByMaterial('IMG_5699');
   nav.start();
   loader.classList.add('gone');
   setTimeout(() => { loader.style.display = 'none'; }, 850);

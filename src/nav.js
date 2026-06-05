@@ -155,7 +155,10 @@ export class RoomNav {
   // Process a freshly-loaded root: bake transforms, build BVH, register colliders,
   // and apply the CURRENT render style (so chunks streamed in after the user has
   // switched to "colour" keep their authored materials instead of going plaster).
-  _ingestRoot(root) {
+  // foliageScan: aggressive cut-out detection for outdoor CORE (site/vegetation) —
+  // any textured material that isn't an obvious solid is treated as foliage. Left
+  // OFF for streamed sculptures so their RGBA textures never get alpha-clipped.
+  _ingestRoot(root, foliageScan = false) {
     this.scene.add(root);
     root.updateMatrixWorld(true);       // bake node translations before reading AABBs
     const useOrig = this.renderStyle === 'material';
@@ -175,10 +178,62 @@ export class RoomNav {
       if (m && sy < 1.5 && Math.max(sx, sz) > 25) {
         m.polygonOffset = true; m.polygonOffsetFactor = 1.5; m.polygonOffsetUnits = 2;
       }
+      // ---- foliage vs solid classification ----
+      const nm = (m && m.name) || '';
+      // Real glass is untextured (or explicitly named). A transmissive material that
+      // ALSO carries a colour texture is almost always mis-authored foliage — e.g.
+      // the cypress allée here ships as "vray_Material" with transmission:1 and a
+      // needle map, which renders as a black transmissive blob. Treat it as foliage.
+      const glassName = /glass|vidro|mirror|window|стекл/i.test(nm);
+      const isGlass = m && m.transmission > 0 && (!m.map || glassName);
+      if (m && m.transmission > 0 && !isGlass) m.transmission = 0;   // un-glass the mis-flagged foliage
+      const folName = /leaf|leaves|needle|twig|foliage|frond|branch|blossom|petal|grass|bush|hedge|\bfir\b|pine|spruce|cypress|thuja|willow/i.test(nm);
+      // obvious solid surfaces that must NEVER be alpha-clipped — limited to classes
+      // whose RGBA alpha can be MEANINGFUL (not a cut-out mask): metals (the gilded
+      // sculptures, fixtures — alpha may pack data), glass, ground/plaza decals (alpha
+      // blends paths), and fruit. Everything else textured is fair game: on a truly
+      // opaque surface alphaTest 0.5 discards nothing, so it's harmless there.
+      const solidName = /metal|steel|brass|bronze|gold|chrome|cromo|iron|stainless|alumin|copper|glass|mirror|vidro|ground|gravel|concrete|cement|asphalt|\broad\b|pavement|paving|\bpath\b|water|pond|aqua|lake|\btile\b|apple|fruit|berry/i.test(nm);
+      // CORE only: a textured material that isn't an obvious solid = cut-out foliage
+      // (catches generically-named hedge/bush cards like "Material.027").
+      const scanFoliage = foliageScan && m && m.map && !isGlass && !solidName;
+      const fol = folName || scanFoliage;
       // keep alpha-cutout foliage & glass as authored; plaster the solid rest
-      const keep = m && (m.transmission > 0 || m.alphaTest > 0 || m.transparent);
-      if (keep) m.side = THREE.DoubleSide;
-      else if (!useOrig) o.material = this.plaster;   // uniform gypsum surface
+      const keep = m && (isGlass || m.alphaTest > 0 || m.transparent || fol);
+      if (keep) {
+        m.side = THREE.DoubleSide;
+        // Render cut-out foliage (trees / туи / hedges) as OPAQUE alpha-test. Fixes
+        // two shipping bugs: (a) leaves exported as alpha-BLEND sort-flicker black↔
+        // green frame to frame; (b) cards exported as OPAQUE ignore the texture's
+        // alpha and show its black background as solid black quads. Alpha-test is
+        // depth-tested + sort-independent → steady. Solids/glass are excluded above.
+        const cutout = fol || m.alphaTest > 0 || (m.transparent && (m.map || m.alphaMap));
+        if (!isGlass && cutout) {
+          m.alphaTest = m.alphaTest > 0 ? m.alphaTest : 0.5;
+          m.transparent = false;
+          m.depthWrite = true;
+          m.needsUpdate = true;
+        }
+        // Evergreen lift: conical conifers (cypress / туи / fir) ship with a very
+        // dark needle texture that crushes to near-black under the bright site sun
+        // in the 3/4 overview. For tall-narrow cut-out foliage with a texture, clone
+        // the material (so the wide canopy/roof instances sharing it stay as-is) and
+        // lift it to a healthy green via a texture-masked emissive + lighter tint.
+        if (!isGlass && cutout && m.map && this.opts.evergreenLift !== false) {
+          const sz2x = b.max.x - b.min.x, sz2y = b.max.y - b.min.y, sz2z = b.max.z - b.min.z;
+          const conical = sz2y > 1.5 && sz2y > Math.max(sz2x, sz2z) * 1.2;
+          if (conical) {
+            const lifted = m.clone();
+            lifted.color = new THREE.Color('#cfe0b0');     // light sage tint
+            lifted.emissive = new THREE.Color('#43662b');  // green floor under shadows
+            lifted.emissiveMap = m.map;                    // masked by the needle texture
+            lifted.emissiveIntensity = 0.7;
+            lifted.needsUpdate = true;
+            o.material = lifted;
+            o.userData.origMat = lifted;   // survive the material-mode restore
+          }
+        }
+      } else if (!useOrig) o.material = this.plaster;   // uniform gypsum surface
     });
   }
 
@@ -229,7 +284,7 @@ export class RoomNav {
     return new Promise((resolve, reject) => {
       const loader = this._makeLoader({ draco: true });
       loader.load(url, (gltf) => {
-        this._ingestRoot(gltf.scene);
+        this._ingestRoot(gltf.scene, this.groundFollow);   // aggressive cut-out for outdoor sites
         const r = this._recomputeBounds();
         this.ready = true;
         this._apply(0);
@@ -252,7 +307,7 @@ export class RoomNav {
       onProgress({ loaded, total });
     };
     return Promise.all(urls.map((url, i) => new Promise((res, rej) => {
-      loader.load(url, (gltf) => { this._ingestRoot(gltf.scene); res(); },
+      loader.load(url, (gltf) => { this._ingestRoot(gltf.scene, true); res(); },   // core = site/vegetation
         (e) => { prog[i] = { loaded: e.loaded || 0, total: e.total || 0 }; emit(); }, rej);
     }))).then(() => {
       const r = this._recomputeBounds();
@@ -316,6 +371,24 @@ export class RoomNav {
   }
 
   start() { this.clock.start(); requestAnimationFrame(this._loop); }
+
+  // Remove every mesh whose material name matches (visual AND collision), e.g. a
+  // stray single-sided "image plane" wall baked into the source model. Returns the
+  // count removed. Call after the model has loaded (meshes registered as colliders).
+  removeByMaterial(match) {
+    const re = match instanceof RegExp ? match : new RegExp(match, 'i');
+    const hit = this.colliders.filter((o) => o.material && re.test(o.material.name || ''));
+    for (const o of hit) {
+      if (o.parent) o.parent.remove(o);
+      const i = this.colliders.indexOf(o);
+      if (i >= 0) this.colliders.splice(i, 1);
+      if (o.geometry) {
+        if (o.geometry.disposeBoundsTree) o.geometry.disposeBoundsTree();
+        o.geometry.dispose();
+      }
+    }
+    return hit.length;
+  }
 
   // ---------- public control ----------
   onChange(cb) { this.listeners.push(cb); }
@@ -526,7 +599,14 @@ export class RoomNav {
       moved += Math.abs(dx) + Math.abs(dy);
       const pan = (ptrType === 'touch') ? pointers.size >= 2 : mouseMode === 'pan';
       if (pan && this.imm < 0.8) this._pan(dx, dy);   // pan the floor (while orbit hint is shown)
-      else this._rotate(dx, dy);
+      else {
+        // Touch + presence/walk → direct-manipulation look: the world follows the
+        // finger (drag right → scene slides right → you turn left), matching Street
+        // View / mobile-map convention. Desktop (mouse) and the orbit turntable keep
+        // the existing "rotate-the-view" mapping, which already reads naturally there.
+        const rdx = (ptrType === 'touch' && this.imm > 0.55) ? -dx : dx;
+        this._rotate(rdx, dy);
+      }
       this._interact();
     };
     const onUp = (e) => {
