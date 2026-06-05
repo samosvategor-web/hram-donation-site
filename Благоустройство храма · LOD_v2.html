@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Благоустройство — Навигация (LOD v2)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="src/styles.css">
+<style>
+/* ---- LOD streaming badge: reports near-geometry chunks arriving ---- */
+#stream{
+  position:fixed;top:14px;left:50%;transform:translateX(-50%) translateY(-8px);
+  z-index:30;display:flex;align-items:center;gap:10px;pointer-events:none;
+  padding:7px 13px;border-radius:999px;
+  background:rgba(20,16,10,.62);border:1px solid rgba(241,233,218,.22);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:10px;letter-spacing:.14em;
+  text-transform:uppercase;color:#f1e9da;
+  opacity:0;transition:opacity .4s ease,transform .4s ease;
+}
+#stream.on{opacity:1;transform:translateX(-50%) translateY(0);}
+#stream .dot{width:6px;height:6px;border-radius:50%;background:#c8a85f;box-shadow:0 0 8px #c8a85f;}
+#stream.busy .dot{animation:streamPulse 1s ease-in-out infinite;}
+#stream .lbl{color:rgba(241,233,218,.66);}
+#stream .ct{color:#f1e9da;font-weight:600;}
+@keyframes streamPulse{0%,100%{opacity:.35;}50%{opacity:1;}}
+@media (prefers-reduced-motion:reduce){#stream.busy .dot{animation:none;}}
+/* v2 tag on the badge */
+#stream .v2{color:#c8a85f;font-weight:600;letter-spacing:.18em;}
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+  "three-mesh-bvh": "https://unpkg.com/three-mesh-bvh@0.7.8/build/index.module.js"
+}}
+</script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="app">
+  <div class="loader" id="loader">
+    <div class="ld-t">Благоустройство</div>
+    <div class="ld-bar"><i id="ldfill"></i></div>
+    <div class="ld-p" id="ldp">Загрузка базы — 0.0 МБ</div>
+  </div>
+</div>
+
+<div id="tweaks-root"></div>
+
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="src/tweaks.jsx"></script>
+
+<script type="module">
+import { RoomNav } from './src/nav.js?v=10';
+import { mountUI } from './src/ui.js';
+
+const app = document.getElementById('app');
+const loader = document.getElementById('loader');
+const ldfill = document.getElementById('ldfill');
+const ldp = document.getElementById('ldp');
+
+// Exterior site model: larger scale, terrain follow, framed lower than a spire.
+const nav = new RoomNav(app, {
+  groundFollow: true,
+  walkSpeed: 10,
+  orbitTargetFrac: 0.22,
+  r0Scale: 0.82,
+  azDeg: -40,
+  eyeHeight: 1.62,
+  near: 0.3,
+  colorSun: true,
+  sunAzDeg: 35,
+  sunElevDeg: 42,
+  sunIntensity: 2.0,
+});
+mountUI(app, nav, {
+  title: 'Благоустройство',
+  subtitle: 'Территория храма — навигация (LOD v2)',
+  groundWord: { dat: 'земле', acc: 'земля' },
+  fixedRenderStyle: 'material',
+});
+
+const DIR = 'assets/grounds-lod-v2/';
+const V = '?b2';   // cache-bust: re-baked impostors (same filenames)
+const F = (name) => DIR + name + V;
+
+// ============================================================================
+// BASE (always on, ~13 МБ): site + far billboards for plants & statues.
+//   site.glb        — temple + ground + paving + context (one version)
+//   plants_far.glb  — trees as crossed-quad impostors (instanced)
+//   statues_far.glb — sculptures as billboards
+// ============================================================================
+nav.loadCore([F('site.glb')], (p) => {
+  const mb = p.loaded / 1048576;
+  const total = p.total ? p.total / 1048576 : 11.63;
+  ldfill.style.width = Math.min(100, (mb / total) * 90) + '%';
+  ldp.textContent = `Загрузка базы — ${mb.toFixed(1)} МБ`;
+}).then(() => {
+  // Remove the stray single-sided "image plane" wall (IMG_5699) so the passage
+  // by the staircase stays walk-through.
+  nav.removeByMaterial('IMG_5699');
+  ldp.textContent = 'Загрузка билбордов…';
+  return nav.loadFar([
+    { url: F('plants_far.glb'),  group: 'plants'  },
+    { url: F('statues_far.glb') + '&r=2', group: 'statues' },
+  ]);
+}).then(() => {
+  ldfill.style.width = '100%';
+  ldp.textContent = 'Готово';
+  nav.start();
+  loader.classList.add('gone');
+  setTimeout(() => { loader.style.display = 'none'; }, 850);
+
+  // ==========================================================================
+  // NEAR (streamed by proximity while walking): real geometry swaps in for the
+  // far billboard, and unloads again when you walk away.
+  //   - Plants are territory-wide → centred on the model centre, big radius,
+  //     so all three species files come in once you're walking among them.
+  //   - Statues are localised → their README world centres, tighter behaviour.
+  // ==========================================================================
+  const c = nav.center;                       // computed territory centre
+  const territory = [c.x, c.y, c.z];
+
+  // Mobile = coarse pointer / small screen. There we keep ALL plants as cheap
+  // impostors even up close (never stream heavy near foliage), and swap sculptures
+  // far↔near purely by how close the CAMERA is (radius), independent of zoom level.
+  const isMobile = matchMedia('(pointer: coarse)').matches
+    || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+    || Math.min(innerWidth, innerHeight) < 600;
+
+  const plantItems = [
+    { name: 'Растения · пихта',     url: F('plants_near_a.glb'), center: territory, group: 'plants',  foliage: true },
+    { name: 'Растения · ива/сосна', url: F('plants_near_b.glb'), center: territory, group: 'plants',  foliage: true },
+    { name: 'Растения · фикус',     url: F('plants_near_c.glb'), center: territory, group: 'plants',  foliage: true },
+  ];
+  const statueItems = [
+    { name: 'Лев',              url: F('lion_near.glb'),   center: [-3.3, 0.7, -14.1],  group: 'statues' },
+    { name: 'Орёл',             url: F('eagle_near.glb'),  center: [-7.0, 1.4, -14.7],  group: 'statues' },
+    { name: 'Навершие (ангел)', url: F('angel_near.glb'),  center: [5.6, 1.2, -13.2],   group: 'statues' },
+    { name: 'Св. Ксения',       url: F('ksenia_near.glb'), center: [-29.8, 1.1, -17.0], group: 'statues' },
+  ];
+
+  if (isMobile) {
+    // plants → impostors always; statues → swap by camera proximity
+    nav.streamLOD(statueItems, {
+      swapMode: 'distance',
+      swapRadius: 16,    // show the detailed statue once the camera is within 16 m
+      radius: 24,        // preload a little before the swap distance
+      unloadMul: 2.0,    // unload past 48 m → frees VRAM
+    });
+  } else {
+    // desktop → full LOD: near plants + statues swap by dive/zoom level
+    nav.streamLOD([...plantItems, ...statueItems], {
+      minImm: 0.12,      // only stream while diving/walking (overview stays pure base)
+      radius: 60,        // load when focus is within 60 m
+      unloadMul: 1.7,    // unload past 102 m → frees geometry/VRAM
+    });
+  }
+}).catch((err) => {
+  ldp.textContent = 'Ошибка загрузки: ' + err;
+  console.error(err);
+});
+
+window.__nav = nav;
+</script>
+</body>
+</html>

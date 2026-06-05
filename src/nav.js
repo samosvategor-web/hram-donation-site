@@ -87,6 +87,7 @@ export class RoomNav {
     this.orbitTargetFrac = opts.orbitTargetFrac ?? 0.60; // look-at height as fraction of bbox from min
     this.lastInteract = -1e9;
     this.colliders = [];
+    this.collisionMeshes = [];      // subset that gets a BVH + is raycast (architecture + ground only)
     this.glide = null;             // {fromX,fromZ,toX,toZ,t,dur}
     this.keys = {};
     this.ready = false;
@@ -106,6 +107,25 @@ export class RoomNav {
     this.ssao.maxDistance = 0.04;
     this.composer.addPass(this.ssao);
     this.composer.addPass(new OutputPass());
+
+    // SSAO's depth+normal pass uses an override material that IGNORES alpha-test, so
+    // cut-out billboards/foliage are seen as SOLID quads → a rectangular AO halo that
+    // only shows from the quad's front side (override material is single-sided). Hide
+    // those alpha-test cards for the duration of the AO pass — flat cards need no AO,
+    // and the beauty pass (which keeps them) is untouched.
+    {
+      const ssao = this.ssao;
+      const self = this;
+      const inner = ssao.render.bind(ssao);
+      ssao.render = function (renderer, writeBuffer, readBuffer, deltaTime, maskActive) {
+        const hidden = [];
+        for (const o of self.colliders) {
+          if ((o.userData.isFar || o.userData.isFoliage) && o.visible) { o.visible = false; hidden.push(o); }
+        }
+        try { inner(renderer, writeBuffer, readBuffer, deltaTime, maskActive); }
+        finally { for (const o of hidden) o.visible = true; }
+      };
+    }
 
     // tunables (filled after model loads)
     this.center = new THREE.Vector3(11, -0.5, -11);
@@ -144,10 +164,12 @@ export class RoomNav {
       loader.setDRACOLoader(d);
     }
     if (ktx2) {
-      const k = new KTX2Loader()
-        .setTranscoderPath('https://unpkg.com/three@0.160.0/examples/jsm/libs/basis/')
-        .detectSupport(this.renderer);   // renderer already exists
-      loader.setKTX2Loader(k);
+      if (!this._ktx2) {                 // share ONE transcoder across all loaders
+        this._ktx2 = new KTX2Loader()
+          .setTranscoderPath('https://unpkg.com/three@0.160.0/examples/jsm/libs/basis/')
+          .detectSupport(this.renderer);
+      }
+      loader.setKTX2Loader(this._ktx2);
     }
     return loader;
   }
@@ -158,7 +180,7 @@ export class RoomNav {
   // foliageScan: aggressive cut-out detection for outdoor CORE (site/vegetation) —
   // any textured material that isn't an obvious solid is treated as foliage. Left
   // OFF for streamed sculptures so their RGBA textures never get alpha-clipped.
-  _ingestRoot(root, foliageScan = false) {
+  _ingestRoot(root, foliageScan = false, tag = null) {
     this.scene.add(root);
     root.updateMatrixWorld(true);       // bake node translations before reading AABBs
     const useOrig = this.renderStyle === 'material';
@@ -166,9 +188,9 @@ export class RoomNav {
       if (!o.isMesh) return;
       o.frustumCulled = false;          // critical: bad bounding spheres else cull these
       o.geometry.computeBoundingBox();
-      o.geometry.computeBoundsTree();   // BVH for fast collision raycasts
       const b = o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld);
       this.colliders.push(o);
+      if (tag) o.userData.tag = tag;    // perf: classify streamed chunks (e.g. 'sculpture')
       const m = o.material;
       o.userData.origMat = m;           // remember authored material for the "colour" mode
       if (m) m.envMapIntensity = 1.35;  // lift dark authored materials via IBL
@@ -177,6 +199,7 @@ export class RoomNav {
       const sx = b.max.x - b.min.x, sy = b.max.y - b.min.y, sz = b.max.z - b.min.z;
       if (m && sy < 1.5 && Math.max(sx, sz) > 25) {
         m.polygonOffset = true; m.polygonOffsetFactor = 1.5; m.polygonOffsetUnits = 2;
+        o.userData.ground = true;       // perf: large flat slab = ground/plaza
       }
       // ---- foliage vs solid classification ----
       const nm = (m && m.name) || '';
@@ -201,6 +224,7 @@ export class RoomNav {
       // keep alpha-cutout foliage & glass as authored; plaster the solid rest
       const keep = m && (isGlass || m.alphaTest > 0 || m.transparent || fol);
       if (keep) {
+        o.userData.isFoliage = !!fol;   // perf: cut-out vegetation card
         m.side = THREE.DoubleSide;
         // Render cut-out foliage (trees / туи / hedges) as OPAQUE alpha-test. Fixes
         // two shipping bugs: (a) leaves exported as alpha-BLEND sort-flicker black↔
@@ -234,6 +258,17 @@ export class RoomNav {
           }
         }
       } else if (!useOrig) o.material = this.plaster;   // uniform gypsum surface
+
+      // ---- collision set: only architecture + ground get a BVH (used by every
+      // raycast). Foliage + streamed sculptures are skipped entirely — no walk
+      // collision, no ground-cast, no BVH. That strips the per-mesh BVH typed arrays
+      // (the heaviest CPU-RAM cost) from the bulk of the scene and cuts load time.
+      const noCollide = fol || tag === 'sculpture';
+      if (!noCollide) {
+        o.geometry.computeBoundsTree();   // BVH for fast collision raycasts
+        this.collisionMeshes.push(o);
+        o.userData.collide = true;
+      }
     });
   }
 
@@ -267,7 +302,7 @@ export class RoomNav {
     this.walkX = center.x; this.walkZ = center.z;
     // find floor by ray-casting straight down at the centre
     this._ray.set(new THREE.Vector3(center.x, box.max.y + 5, center.z), new THREE.Vector3(0, -1, 0));
-    const hits = this._ray.intersectObjects(this.colliders, true);
+    const hits = this._ray.intersectObjects(this.collisionMeshes, true);
     let floorY;
     if (hits.length) {
       floorY = this.groundFollow ? hits[hits.length - 1].point.y
@@ -358,7 +393,7 @@ export class RoomNav {
     this._streamBusy = true;
     this._emitStream();
     this._streamLoader.load(best.url, (gltf) => {
-      this._ingestRoot(gltf.scene);     // applies current render style; sits at identity
+      this._ingestRoot(gltf.scene, false, 'sculpture');   // applies current render style; sits at identity
       best.status = 'done';
       this._streamBusy = false;
       this._emitStream();
@@ -372,6 +407,210 @@ export class RoomNav {
 
   start() { this.clock.start(); requestAnimationFrame(this._loop); }
 
+  // ============================================================================
+  // LOD v2 — far billboards (base) + proximity near-geometry swap.
+  // Base = site + plants_far + statues_far (billboards, cheap, always on).
+  // Walking near a feature streams its real geometry and hides the matching
+  // far billboard; walking away disposes the geometry and restores the billboard.
+  // ============================================================================
+
+  // Load far-LOD billboard files. Each mesh is unlit + alpha-mask (4-tri crossed
+  // quads). We tag them by group and DON'T run the heavy foliage/plaster pass —
+  // billboards are authored final. They never get a BVH (you walk through them).
+  loadFar(specs, onProgress) {
+    const loader = this._makeLoader({ ktx2: true });
+    const prog = specs.map(() => ({ loaded: 0, total: 0 }));
+    const emit = () => {
+      if (!onProgress) return;
+      let loaded = 0, total = 0;
+      for (const p of prog) { loaded += p.loaded; total += p.total; }
+      onProgress({ loaded, total });
+    };
+    return Promise.all(specs.map((spec, i) => new Promise((res, rej) => {
+      loader.load(spec.url, (gltf) => { this._ingestFar(gltf.scene, spec.group); res(); },
+        (e) => { prog[i] = { loaded: e.loaded || 0, total: e.total || 0 }; emit(); }, rej);
+    })));
+  }
+  _ingestFar(root, group) {
+    this.scene.add(root);
+    root.updateMatrixWorld(true);
+    root.traverse((o) => {
+      if (!o.isMesh) return;
+      o.frustumCulled = false;
+      o.geometry.computeBoundingBox();
+      this.colliders.push(o);            // counted for perf/visibility, NOT collision
+      o.userData.isFar = true;
+      o.userData.farGroup = group;
+      o.userData.origMat = o.material;
+      const m = o.material;
+      if (m) {
+        m.side = THREE.DoubleSide;       // crossed quads read from any horizontal angle
+        m.alphaTest = 0.5;
+        m.transparent = false;
+        m.depthWrite = true;
+        m.needsUpdate = true;
+      }
+      const c = o.geometry.boundingBox.getCenter(new THREE.Vector3()).applyMatrix4(o.matrixWorld);
+      o.userData.farCenter = c;          // for matching the near swap
+    });
+  }
+
+  // Proximity LOD streaming with far↔near swap + unload.
+  //   items: [{ url, name, center:[x,y,z], group:'plants'|'statues', foliage:bool }]
+  //   opts.radius    — load when the focus is within this distance (default ∞)
+  //   opts.unloadMul — unload past radius*unloadMul (default 1.6; 0 = never unload)
+  //   opts.minImm    — only stream above this immersion (default 0; 0.12 ≈ walk only)
+  //   opts.onChange(state)
+  streamLOD(items, opts = {}) {
+    this._lod = items.map((it) => ({
+      url: it.url, name: it.name || it.url,
+      center: new THREE.Vector3(it.center[0], it.center[1], it.center[2]),
+      group: it.group || 'statues',
+      foliage: !!it.foliage,
+      status: 'idle',                    // idle | loading | done
+      root: null, meshes: [], farHidden: null,
+    }));
+    this._lodLoader = this._makeLoader({ ktx2: true });
+    this._lodRadius = opts.radius ?? Infinity;
+    this._lodUnloadMul = opts.unloadMul ?? 1.6;
+    this._lodMinImm = opts.minImm ?? 0;
+    // swap trigger: 'immersion' (zoom/dive level, default) or 'distance' (camera
+    // proximity to each item, independent of zoom — used on mobile for sculptures).
+    this._lodSwapMode = opts.swapMode || 'immersion';
+    this._lodSwapRadius = opts.swapRadius ?? this._lodRadius;
+    this._lodCb = opts.onChange || null;
+    this._lodBusy = false;
+    this._lodWalk = false;               // are we currently showing near (walk) detail?
+    this._lodT = 0;
+    this._emitLod();
+  }
+  // Ground-plane focus the LOD system measures proximity from: the camera itself in
+  // 'distance' mode (swap by how close you physically are), else the walk/orbit focus.
+  _lodFocus() {
+    if (this._lodSwapMode === 'distance') {
+      const p = this.camera.getWorldPosition(this._camPos || (this._camPos = new THREE.Vector3()));
+      return p;
+    }
+    return this._tmp.set(this.walkX, 0, this.walkZ);
+  }
+  _emitLod() {
+    if (!this._lodCb) return;
+    const done = this._lod.filter((s) => s.status === 'done').length;
+    const loading = this._lod.find((s) => s.status === 'loading');
+    this._lodCb({ done, total: this._lod.length, loading: loading ? loading.name : null, items: this._lod });
+  }
+  _lodTick() {
+    if (!this._lod) return;
+    const f = this._lodFocus(); const fx = f.x, fz = f.z;
+    const distMode = this._lodSwapMode === 'distance';
+    // 1) unload pass — free anything loaded that's now beyond the unload ring
+    if (this._lodUnloadMul > 0 && isFinite(this._lodRadius)) {
+      const ur = this._lodRadius * this._lodUnloadMul;
+      for (const s of this._lod) {
+        if (s.status !== 'done') continue;
+        if (Math.hypot(s.center.x - fx, s.center.z - fz) > ur) this._unloadLod(s);
+      }
+    }
+    // 2) load pass — nearest idle within radius, one at a time. In immersion mode
+    // also gate on being zoomed in; in distance mode proximity alone triggers it.
+    if (this._lodBusy || (!distMode && this.imm < this._lodMinImm)) return;
+    let best = null, bd = Infinity;
+    for (const s of this._lod) {
+      if (s.status !== 'idle') continue;
+      const d = Math.hypot(s.center.x - fx, s.center.z - fz);
+      if (d <= this._lodRadius && d < bd) { bd = d; best = s; }
+    }
+    if (!best) return;
+    best.status = 'loading'; this._lodBusy = true; this._emitLod();
+    this._lodLoader.load(best.url, (gltf) => {
+      best.root = gltf.scene;
+      const before = this.colliders.length;
+      // near plants = foliage cut-out; near statues keep authored material (tag
+      // 'sculpture' so they skip the BVH — you walk through them, per spec).
+      this._ingestRoot(gltf.scene, best.foliage, best.group === 'statues' ? 'sculpture' : 'foliage');
+      best.meshes = this.colliders.slice(before);
+      best.status = 'done'; this._lodBusy = false;
+      this._swapFar(best, true);
+      this._applyLodVis();               // reflect current walk/overview state
+      this._emitLod();
+    }, undefined, (err) => {
+      console.error('LOD near failed:', best.url, err);
+      best.status = 'idle'; this._lodBusy = false; this._emitLod();
+    });
+  }
+  // Mark (don't directly hide) the far billboard a near item replaces. Actual
+  // visibility is driven by _applyLodVis so overview always shows cheap billboards
+  // and walk shows the streamed geometry, independent of what's loaded in memory.
+  _swapFar(item, loaded) {
+    if (item.group === 'statues') {
+      let best = null, bd = Infinity;
+      for (const o of this.colliders) {
+        if (!o.userData.isFar || o.userData.farGroup !== 'statues') continue;
+        const c = o.userData.farCenter;
+        const d = Math.hypot(c.x - item.center.x, c.z - item.center.z);
+        if (d < bd) { bd = d; best = o; }
+      }
+      if (best) { best.userData.nearLoaded = loaded; item.farHidden = [best]; }
+    }
+    // plants: handled wholesale in _applyLodVis (all-or-nothing once every file is in)
+  }
+  // Drive near-vs-far visibility from immersion. Overview (low imm) → far billboards
+  // only (cheap base). Walk (high imm) → streamed geometry where loaded, its billboard
+  // hidden; un-streamed features still show their billboard.
+  _applyLodVis() {
+    if (!this._lod) return;
+    if (this._lodSwapMode === 'distance') { this._applyLodVisDistance(); return; }
+    const walk = this._lodWalk;
+    for (const s of this._lod) {
+      if (s.status === 'done') for (const o of s.meshes) o.visible = walk;
+    }
+    const plants = this._lod.filter((s) => s.group === 'plants');
+    const plantsLoaded = plants.length > 0 && plants.every((s) => s.status === 'done');
+    for (const o of this.colliders) {
+      if (!o.userData.isFar) continue;
+      if (o.userData.farGroup === 'plants') o.visible = !(walk && plantsLoaded);
+      else if (o.userData.farGroup === 'statues') o.visible = !(walk && o.userData.nearLoaded);
+    }
+  }
+  // Distance swap (mobile sculptures): each item shows its near geometry only while
+  // the camera is within swapRadius of it; otherwise its far billboard shows. No
+  // dependence on zoom. Far plant billboards (no near streamed on mobile) stay on.
+  _applyLodVisDistance() {
+    const f = this._lodFocus(); const fx = f.x, fz = f.z;
+    const r = this._lodSwapRadius;
+    for (const s of this._lod) {
+      const within = Math.hypot(s.center.x - fx, s.center.z - fz) <= r;
+      const showNear = within && s.status === 'done';
+      if (s.status === 'done') for (const o of s.meshes) o.visible = within;
+      if (s.farHidden) for (const o of s.farHidden) o.visible = !showNear;
+    }
+  }
+  _unloadLod(s) {
+    if (s.root && s.root.parent) s.root.parent.remove(s.root);
+    const seen = new Set();
+    for (const o of s.meshes) {
+      let i = this.colliders.indexOf(o); if (i >= 0) this.colliders.splice(i, 1);
+      let j = this.collisionMeshes.indexOf(o); if (j >= 0) this.collisionMeshes.splice(j, 1);
+      if (o.geometry) {
+        if (o.geometry.disposeBoundsTree) o.geometry.disposeBoundsTree();
+        o.geometry.dispose();
+      }
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) {
+        if (!m || seen.has(m)) continue; seen.add(m);
+        for (const k of ['map', 'normalMap', 'emissiveMap', 'roughnessMap', 'metalnessMap', 'alphaMap', 'aoMap']) {
+          if (m[k] && m[k].dispose) m[k].dispose();
+        }
+        m.dispose();
+      }
+    }
+    s.meshes = []; s.root = null; s.status = 'idle';
+    this._swapFar(s, false);             // clear the billboard's near flag
+    this._applyLodVis();                 // restore the billboard(s)
+    this._emitLod();
+  }
+
+
   // Remove every mesh whose material name matches (visual AND collision), e.g. a
   // stray single-sided "image plane" wall baked into the source model. Returns the
   // count removed. Call after the model has loaded (meshes registered as colliders).
@@ -382,6 +621,8 @@ export class RoomNav {
       if (o.parent) o.parent.remove(o);
       const i = this.colliders.indexOf(o);
       if (i >= 0) this.colliders.splice(i, 1);
+      const j = this.collisionMeshes.indexOf(o);
+      if (j >= 0) this.collisionMeshes.splice(j, 1);
       if (o.geometry) {
         if (o.geometry.disposeBoundsTree) o.geometry.disposeBoundsTree();
         o.geometry.dispose();
@@ -513,6 +754,92 @@ export class RoomNav {
   setAoLevel(v) { this.aoLevel = v; }
   setAoBand(v) { this.aoBand = v; }
   setExposure(v) { this.renderer.toneMappingExposure = v; }
+
+  // ---------- perf experiment knobs (diagnostics harness) ----------
+  // Change the render scale (device pixel ratio) live — composer + SSAO follow.
+  setRenderScale(x) {
+    this.renderer.setPixelRatio(x);
+    if (this.composer) this.composer.setPixelRatio(x);
+    this._resize();
+  }
+  // Skip ALL post-processing: render the scene straight to screen (isolates the
+  // cost of the composer/SSAO/output passes vs the raw scene draw).
+  setNoPost(b) { this.noPost = !!b; }
+  // Restore frustum culling (recompute correct bounding spheres) or disable it.
+  setCulling(on) {
+    for (const o of this.colliders) {
+      if (on) { o.geometry.computeBoundingSphere(); o.frustumCulled = true; }
+      else o.frustumCulled = false;
+    }
+  }
+  // Foliage cards single- vs double-sided (halves their overdraw when single).
+  setFoliageSingleSide(on) {
+    for (const o of this.colliders) {
+      if (!o.userData.isFoliage || !o.material) continue;
+      o.material.side = on ? THREE.FrontSide : THREE.DoubleSide;
+    }
+  }
+  // Show/hide all vegetation (quick A/B of foliage fill-rate cost).
+  setVegetationVisible(on) {
+    for (const o of this.colliders) if (o.userData.isFoliage) o.visible = on;
+  }
+  // Runtime "true LOD" probe: hide foliage + sculptures beyond r metres of the
+  // focus. r<=0 shows everything again.
+  setDetailRadius(r) {
+    const fx = this.walkX, fz = this.walkZ;
+    for (const o of this.colliders) {
+      const far = o.userData.isFoliage || o.userData.tag === 'sculpture';
+      if (!far) continue;
+      if (!r || r <= 0) { o.visible = true; continue; }
+      if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+      const c = o.geometry.boundingBox.getCenter(this._tmp).applyMatrix4(o.matrixWorld);
+      o.visible = Math.hypot(c.x - fx, c.z - fz) <= r;
+    }
+  }
+  // Throttle the per-frame ground raycast (0 = every frame).
+  setFollowHz(hz) { this._followHz = hz; }
+  // Extreme geometry-bound probe: show ONLY the ground/terrain slabs, hide all
+  // buildings/foliage/sculptures. If FPS recovers here but not with DPR/SSAO, the
+  // bottleneck is vertex/draw count (→ needs real LOD), not fill-rate.
+  setGroundOnly(on) {
+    for (const o of this.colliders) {
+      if (o.userData.ground) { o.visible = true; continue; }
+      o.visible = !on;
+    }
+  }
+  // Total triangles of ALL loaded geometry (not per-frame) — the static scene cost.
+  sceneTriangles() {
+    var t = 0;
+    for (var i = 0; i < this.colliders.length; i++) {
+      var g = this.colliders[i].geometry;
+      var n = g.index ? g.index.count : (g.attributes.position ? g.attributes.position.count : 0);
+      t += n / 3;
+    }
+    return t;
+  }
+  // Enable accurate full-frame draw-call/triangle stats (sums across all passes).
+  setStats(on) {
+    this._statsReset = !!on;
+    this.renderer.info.autoReset = !on;
+  }
+  perfCounts() {
+    let meshes = 0, vis = 0;
+    for (const o of this.colliders) { meshes++; if (o.visible) vis++; }
+    let nodes = 0;
+    this.scene.traverse(() => nodes++);
+    return { meshes, vis, nodes, collide: this.collisionMeshes.length };
+  }
+
+  // Skip the draw call entirely (keep the JS loop running). Splits CPU-loop cost
+  // from GPU/render/memory cost: if it's still janky with no draw → JS-bound.
+  setNoRender(b) { this.noRender = !!b; }
+  // Freeze per-frame world-matrix traversal (everything here is static). Tests the
+  // fixed CPU cost of walking the whole scene graph every frame, regardless of
+  // what's visible. Camera matrix is updated independently, so the view still moves.
+  setStaticMatrices(on) {
+    this.scene.matrixWorldAutoUpdate = !on;
+    if (on) this.scene.updateMatrixWorld(true);
+  }
   getHeadingDeg() {
     this.camera.getWorldDirection(this._fwd);
     let a = Math.atan2(this._fwd.x, -this._fwd.z) / DEG;
@@ -560,7 +887,7 @@ export class RoomNav {
     const ndc = new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
     this._ray.setFromCamera(ndc, this.camera);
     this._ray.firstHitOnly = true;
-    const hits = this._ray.intersectObjects(this.colliders, true);
+    const hits = this._ray.intersectObjects(this.collisionMeshes, true);
     if (!hits.length) return;
     const p = hits[0].point;
     const tx = clamp(p.x, this.walkBounds.minX, this.walkBounds.maxX);
@@ -659,7 +986,7 @@ export class RoomNav {
     const r = this.renderer.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
     this._ray.setFromCamera(ndc, this.camera);
-    const hits = this._ray.intersectObjects(this.colliders, true);
+    const hits = this._ray.intersectObjects(this.collisionMeshes, true);
     if (!hits.length) return;
     const p = hits[0].point;
     let tx = clamp(p.x, this.walkBounds.minX, this.walkBounds.maxX);
@@ -671,7 +998,7 @@ export class RoomNav {
       this._ray.firstHitOnly = true;
       this._ray.set(this._tmp.set(this.walkX, this.eyeY - 0.4, this.walkZ), this._dirX.set(dx / dist, 0, dz / dist));
       this._ray.far = dist;
-      const wall = this._ray.intersectObjects(this.colliders, true);
+      const wall = this._ray.intersectObjects(this.collisionMeshes, true);
       this._ray.far = Infinity;
       if (wall.length && wall[0].distance < dist) {
         const d = Math.max(0, wall[0].distance - 0.5);
@@ -714,14 +1041,14 @@ export class RoomNav {
       const sx = Math.sign(dx);
       ray.set(this._tmp.set(this.walkX, oy, this.walkZ), this._dirX.set(sx, 0, 0));
       ray.far = Math.abs(dx) + R;
-      const h = ray.intersectObjects(this.colliders, true);
+      const h = ray.intersectObjects(this.collisionMeshes, true);
       if (h.length && h[0].distance < Math.abs(dx) + R) dx = Math.max(0, h[0].distance - R) * sx;
     }
     if (dz !== 0) {
       const sz = Math.sign(dz);
       ray.set(this._tmp.set(this.walkX, oy, this.walkZ), this._dirX.set(0, 0, sz));
       ray.far = Math.abs(dz) + R;
-      const h = ray.intersectObjects(this.colliders, true);
+      const h = ray.intersectObjects(this.collisionMeshes, true);
       if (h.length && h[0].distance < Math.abs(dz) + R) dz = Math.max(0, h[0].distance - R) * sz;
     }
     ray.far = Infinity;
@@ -740,7 +1067,7 @@ export class RoomNav {
     this._ray.firstHitOnly = false;
     this._ray.set(this._tmp.set(this.walkX, this.bbox.max.y + 6, this.walkZ), this._down);
     this._ray.far = Infinity;
-    const h = this._ray.intersectObjects(this.colliders, true);
+    const h = this._ray.intersectObjects(this.collisionMeshes, true);
     if (h.length) {
       const g = h[h.length - 1].point.y;   // lowest surface = ground
       this.groundY = expSmooth(this.groundY, g, dt, 10);
@@ -774,6 +1101,7 @@ export class RoomNav {
 
   _loop() {
     requestAnimationFrame(this._loop);
+    if (this._statsReset) this.renderer.info.reset();
     if (!this.ready) { this.renderer.render(this.scene, this.camera); return; }
     const dt = Math.min(this.clock.getDelta(), 0.05);
 
@@ -783,6 +1111,16 @@ export class RoomNav {
 
     // LOD streaming: poll proximity a few times a second (cheap; loads one at a time)
     if (this._stream) { this._streamT += dt; if (this._streamT > 0.35) { this._streamT = 0; this._streamTick(); } }
+    if (this._lod) {
+      this._lodT += dt; if (this._lodT > 0.3) { this._lodT = 0; this._lodTick(); }
+      if (this._lodSwapMode === 'distance') {
+        this._applyLodVis();             // distance swap follows the camera every frame
+      } else {
+        const walkNow = this.imm > 0.6;  // swap near↔far detail at the dive midpoint
+        if (walkNow !== this._lodWalk) { this._lodWalk = walkNow; this._applyLodVis(); }
+      }
+    }
+    if (this._lod) { this._lodT += dt; if (this._lodT > 0.3) { this._lodT = 0; this._lodTick(); } }
 
     const prevMode = this.mode;
     this.mode = this.imm > 0.8 ? 'walk' : 'orbit';
@@ -802,10 +1140,22 @@ export class RoomNav {
       if (g.t >= 1) this.glide = null;
     }
     if (this.mode === 'walk') this._walkMove(dt);
-    if (this.groundFollow && this.imm > 0.12) this._followGround(dt);
+    if (this.groundFollow && this.imm > 0.12) {
+      const hz = this._followHz || 0;          // 0 = every frame (default)
+      if (hz <= 0) this._followGround(dt);
+      else {
+        this._followAccum = (this._followAccum || 0) + dt;
+        if (this._followAccum >= 1 / hz) { this._followGround(this._followAccum); this._followAccum = 0; }
+      }
+    }
 
     this._apply(s);
-    if (this.renderStyle === 'sketch') {
+    if (this.noRender) {
+      // skip the draw entirely — isolates JS-loop/CPU cost from GPU/render cost
+    } else if (this.noPost) {
+      this.renderer.setRenderTarget(null);
+      this.renderer.render(this.scene, this.camera);
+    } else if (this.renderStyle === 'sketch') {
       this.sketch.render(this.scene, this.camera);
     } else {
       // AO reads great on the 3/4 maquette but goes grainy against walls inside.
