@@ -88,16 +88,16 @@ section{padding:90px 0;position:relative;}
 
 /* ---------- quote ---------- */
 .quote-sec{background:var(--paper-2);border-bottom:1px solid var(--border);}
-.quote-grid{display:grid;grid-template-columns:300px 1fr;gap:54px;align-items:center;max-width:1020px;margin:0 auto;}
+.quote-grid{display:grid;grid-template-columns:262px 1fr;gap:54px;align-items:center;max-width:1020px;margin:0 auto;}
 .quote-photo{position:relative;}
-.quote-photo img{width:100%;aspect-ratio:1/1;object-fit:cover;border:1px solid var(--border);}
+.quote-photo img{width:100%;aspect-ratio:70/100;object-fit:cover;object-position:50% 56%;display:block;border:1px solid var(--border);}
 .quote-photo .corner{position:absolute;width:18px;height:18px;border:1px solid var(--gold);}
 .quote-photo .corner.tl{top:-1px;left:-1px;border-right:0;border-bottom:0;}
 .quote-photo .corner.br{bottom:-1px;right:-1px;border-left:0;border-top:0;}
-.quote-body .mark{font-family:var(--display);font-style:italic;font-size:80px;line-height:.4;color:var(--gold-light);height:30px;display:block;}
+.quote-body .mark{font-family:var(--display);font-style:italic;font-size:74px;line-height:.4;color:var(--gold-light);height:26px;display:block;}
 .quote-body blockquote{margin:0;font-family:var(--display);font-style:italic;font-weight:500;
-  font-size:clamp(24px,3vw,33px);line-height:1.35;color:var(--ink);}
-.quote-body .who{margin-top:24px;display:flex;flex-direction:column;gap:3px;}
+  font-size:clamp(25px,2.95vw,33px);line-height:1.5;color:var(--ink);text-wrap:pretty;max-width:none;}
+.quote-body .who{margin-top:28px;display:flex;flex-direction:column;gap:4px;}
 .quote-body .who .n{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink);}
 .quote-body .who .t{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);}
 @media (max-width:760px){ .quote-grid{grid-template-columns:1fr;gap:30px;} .quote-photo{max-width:240px;} }
@@ -112,6 +112,30 @@ section{padding:90px 0;position:relative;}
 /* app-mode: the tour always opens full-viewport, like a launched app */
 .embed.fs-on{position:fixed;inset:0;margin:0;max-width:none;border:0;z-index:9999;background:#e8e5de;}
 .embed.fs-on .ratio{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto;}
+
+/* ---------- rotate-to-landscape hint (translucent, non-blocking watermark) ---------- */
+/* The tour follows the phone's real orientation. While it's open AND held in
+   portrait, a faint watermark recommends turning to landscape — it never blocks
+   the view (pointer-events:none) and fades out the moment the phone is rotated. */
+.rotate-hint{position:fixed;inset:0;z-index:10000;display:none;align-items:center;justify-content:center;
+  pointer-events:none;padding:32px;}
+@media (orientation:portrait) and (pointer:coarse){
+  body.tour-open .rotate-hint{display:flex;}
+}
+.rotate-hint .card{display:flex;flex-direction:column;align-items:center;gap:15px;text-align:center;
+  padding:26px 30px;border-radius:18px;max-width:300px;color:#f3ead9;
+  background:rgba(20,16,10,.34);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+  border:1px solid rgba(200,168,95,.26);box-shadow:0 12px 44px rgba(0,0,0,.22);
+  opacity:.82;animation:hintFade .55s ease both;}
+@keyframes hintFade{from{opacity:0;transform:translateY(10px);}to{opacity:.82;transform:none;}}
+.rotate-hint .phone{width:58px;height:98px;border:2.5px solid var(--gold-light);border-radius:12px;
+  position:relative;transform-origin:center center;animation:rotatePhone 2.6s ease-in-out infinite;}
+.rotate-hint .ph-screen{position:absolute;inset:7px;border:1px solid rgba(200,168,95,.4);border-radius:5px;}
+.rotate-hint .ph-dot{position:absolute;left:50%;bottom:5px;transform:translateX(-50%);
+  width:7px;height:7px;border-radius:50%;background:var(--gold-light);}
+@keyframes rotatePhone{0%,28%{transform:rotate(0);}58%,100%{transform:rotate(-90deg);}}
+.rotate-hint h3{font-family:var(--display);font-style:italic;font-weight:500;font-size:25px;line-height:1.1;margin:0;}
+.rotate-hint p{font-family:var(--serif);font-size:14px;line-height:1.6;color:rgba(243,234,217,.8);max-width:260px;margin:0;}
 /* native fullscreen (real devices) — also hides the browser's address bar / menu */
 .embed:fullscreen{width:100%;height:100%;max-width:none;margin:0;border:0;background:#e8e5de;}
 .embed:-webkit-full-screen{width:100%;height:100%;max-width:none;margin:0;border:0;background:#e8e5de;}
@@ -169,7 +193,8 @@ section{padding:90px 0;position:relative;}
 .song .kicker .mark{background:var(--gold-light);}
 .song .eyebrow{color:var(--gold-light);}
 .song h2.sec{color:#fff;}
-.song .stage{position:relative;min-height:260px;display:flex;align-items:center;justify-content:center;margin-top:30px;margin-bottom:10px;text-align:center;}
+.song{padding:64px 0;}
+.song .stage{position:relative;min-height:170px;display:flex;align-items:center;justify-content:center;margin-top:18px;margin-bottom:6px;text-align:center;}
 .song .line-text{position:absolute;font-family:var(--display);font-style:italic;font-weight:500;
   font-size:clamp(19px,2.5vw,30px);line-height:1.5;color:#f3ecd6;max-width:min(880px,94vw);padding:0 20px;
   opacity:0;transform:translateY(18px);filter:blur(6px);
@@ -182,7 +207,7 @@ section{padding:90px 0;position:relative;}
   78%{opacity:1;transform:translateY(0);filter:blur(0);}
   100%{opacity:0;transform:translateY(-16px);filter:blur(7px);}
 }
-.song .credit{text-align:center;margin-top:8px;font-family:var(--mono);font-size:10px;letter-spacing:.2em;
+.song .credit{text-align:center;margin-top:34px;font-family:var(--mono);font-size:10px;letter-spacing:.2em;
   text-transform:uppercase;color:rgba(232,226,208,.5);}
 .song .controls{display:flex;align-items:center;justify-content:center;gap:16px;margin-top:24px;}
 .song .controls button{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;
@@ -301,6 +326,15 @@ section{padding:90px 0;position:relative;}
   <div class="lb-cap"><span class="t" id="lbTitle"></span><span class="idx" id="lbIdx"></span></div>
 </div>
 
+<!-- ===== rotate-to-landscape hint (mobile, while a tour is open in portrait) ===== -->
+<div class="rotate-hint" id="rotateHint" aria-hidden="true">
+  <div class="card">
+    <div class="phone"><span class="ph-screen"></span><span class="ph-dot"></span></div>
+    <h3>Лучше в альбомной</h3>
+    <p>Поверните телефон горизонтально — так обзор проекта удобнее.</p>
+  </div>
+</div>
+
 <!-- ===== top bar ===== -->
 <div class="topbar">
   <div class="row">
@@ -340,11 +374,11 @@ section{padding:90px 0;position:relative;}
     <div class="quote-grid reveal">
       <div class="quote-photo">
         <span class="corner tl"></span><span class="corner br"></span>
-        <img src="assets/site/priest-father-alexey.jpg" alt="Настоятель храма иерей Алексий Кузьмичёв">
+        <img src="assets/site/priest-father-alexey.png" alt="Настоятель храма иерей Алексий Кузьмичёв">
       </div>
       <div class="quote-body">
         <span class="mark">«</span>
-        <blockquote>Храм созидается не только стенами, но и сердцами тех, кто вкладывает в него свою лепту. Участвуя в общем деле, мы становимся одной семьёй — и каждый труд, каждая молитва, каждое пожертвование остаются в этих стенах навсегда.</blockquote>
+        <blockquote>Храм созидается не только стенами, но и сердцами тех, кто вкладывает в него свою лепту. Участвуя в общем деле, мы становимся одной семьёй — и каждая молитва, каждый труд остаются в этих стенах навсегда.</blockquote>
         <div class="who">
           <span class="n">Иерей Алексий Кузьмичёв</span>
           <span class="t">Настоятель храма</span>
@@ -395,7 +429,7 @@ section{padding:90px 0;position:relative;}
   <div class="stars"></div>
   <div class="wrap" style="position:relative;">
     <div class="kicker reveal"><span class="line"></span><span class="mark"></span><span class="line"></span></div>
-    <div class="eyebrow reveal" style="text-align:center;display:block;">Под небом голубым</div>
+    <div class="eyebrow reveal" style="text-align:center;display:block;">Над небом голубым</div>
     <h2 class="sec reveal">Город золотой</h2>
     <div class="stage" id="songStage">
       <div class="line-text" id="songLine"></div>
@@ -546,6 +580,7 @@ section{padding:90px 0;position:relative;}
     const box = openBox;
     if(fsElement()){ const ex=document.exitFullscreen||document.webkitExitFullscreen; if(ex){ try{ ex.call(document); }catch(e){} } }
     box.classList.remove('fs-on');
+    document.body.classList.remove('tour-open');
     document.body.style.overflow='';
     const cb = box.querySelector('.embed-close'); if(cb) cb.style.display='none';
     const ifr = box.querySelector('.ratio iframe'); if(ifr) ifr.remove();   // unload tour (quit)
@@ -563,6 +598,7 @@ section{padding:90px 0;position:relative;}
     // hide the poster, go full-viewport
     const poster = box.querySelector('.poster'); if(poster) poster.style.display='none';
     box.classList.add('fs-on');
+    document.body.classList.add('tour-open');   // enables the portrait → rotate hint on mobile
     document.body.style.overflow='hidden';
     openBox = box;
     // close (✕) button
@@ -574,9 +610,11 @@ section{padding:90px 0;position:relative;}
       box.appendChild(cb);
     }
     cb.style.display='flex';
-    // also request real fullscreen so the browser chrome (address bar/menu) hides — best effort
+    // best effort: real fullscreen hides the browser chrome (address bar / menu).
+    // We do NOT lock orientation — the tour follows the phone's real orientation,
+    // and the translucent portrait hint simply recommends turning to landscape.
     const req = box.requestFullscreen || box.webkitRequestFullscreen;
-    if(req){ try{ const p=req.call(box); if(p&&p.catch) p.catch(()=>{}); }catch(e){} }
+    if(req){ try{ const p = req.call(box); if(p && p.catch) p.catch(()=>{}); }catch(e){} }
   }
 
   document.addEventListener('keydown', e=>{ if(e.key==='Escape' && openBox) quitApp(); });
@@ -660,22 +698,30 @@ section{padding:90px 0;position:relative;}
    ============================================================ */
 (function(){
   const SONG_LINES = [
-    "Под небом голубым есть город золотой",
-    "С прозрачными воротами и ясною звездой.",
-    "А в городе том сад, всё травы да цветы,",
-    "Гуляют там животные невиданной красы.",
-    "Одно, как жёлтый огнегривый лев,",
-    "Другое вол, исполненный очей,",
+    "Над небом голубым —",
+    "Есть город золотой,",
+    "С прозрачными воротами",
+    "И с яркою стеной.",
+    "А в городе том — сад:",
+    "Всё травы да цветы.",
+    "Гуляют там Животные",
+    "Невиданной красы.",
+    "Одно как рыжий огнегривый лев,",
+    "Другое — вол, исполненный очей.",
+    "Третье — золотой орёл небесный,",
+    "Чей так светел взор незабываемый…",
+    "А в небе голубом",
+    "Горит одна звезда.",
+    "Она твоя, о Ангел мой,",
+    "Она всегда твоя.",
+    "Кто любит — тот люби́м.",
+    "Кто светел — тот и свят.",
+    "Пускай ведёт звезда твоя",
+    "Доро́гой в дивный сад.",
+    "Тебя там встретят огнегривый лев",
+    "И синий вол, исполненный очей.",
     "С ними золотой орёл небесный,",
-    "Чей так светел взор незабываемый.",
-    "А в небе голубом горит одна звезда,",
-    "Она твоя, о, ангел мой, она твоя всегда.",
-    "Кто любит, тот любим, кто светел, тот и свят,",
-    "Пускай ведёт звезда тебя дорогой в дивный сад.",
-    "Тебя там встретит огнегривый лев,",
-    "И синий вол, исполненный очей,",
-    "С ними золотой орёл небесный,",
-    "Чей так светел взор незабываемый.",
+    "Чей так светел взор незабываемый…",
   ];
   // группируем по 4 строки; остаток присоединяем к последнему кадру
   const FRAME = 4;
