@@ -119,9 +119,9 @@ section{padding:90px 0;position:relative;}
    the view (pointer-events:none) and fades out the moment the phone is rotated. */
 .rotate-hint{position:fixed;inset:0;z-index:10000;display:none;align-items:center;justify-content:center;
   pointer-events:none;padding:32px;}
-@media (orientation:portrait) and (pointer:coarse){
-  body.tour-open .rotate-hint{display:flex;}
-}
+/* Visibility is driven by JS (.show) so it works under native fullscreen too,
+   and so it can be verified in a narrow desktop preview, not only on touch HW. */
+.rotate-hint.show{display:flex;}
 .rotate-hint .card{display:flex;flex-direction:column;align-items:center;gap:15px;text-align:center;
   padding:26px 30px;border-radius:18px;max-width:300px;color:#f3ead9;
   background:rgba(20,16,10,.34);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
@@ -575,6 +575,19 @@ section{padding:90px 0;position:relative;}
   const CLOSE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 6l12 12M18 6L6 18"/></svg>';
   let openBox = null;
 
+  /* ---------- portrait → rotate-to-landscape hint ----------
+     Driven by JS so it (a) renders inside the native-fullscreen subtree and
+     (b) can be verified in a narrow desktop preview, not only on touch HW. */
+  const rotateHintEl = document.getElementById('rotateHint');
+  const mqPortrait = window.matchMedia('(orientation: portrait)');
+  function hintShouldShow(){
+    return !!openBox && mqPortrait.matches && window.matchMedia('(pointer: coarse)').matches;
+  }
+  function updateHint(){ if(rotateHintEl) rotateHintEl.classList.toggle('show', hintShouldShow()); }
+  ['resize','orientationchange'].forEach(ev=>window.addEventListener(ev, updateHint));
+  if(mqPortrait.addEventListener) mqPortrait.addEventListener('change', updateHint);
+  else if(mqPortrait.addListener) mqPortrait.addListener(updateHint);
+
   function quitApp(){
     if(!openBox) return;
     const box = openBox;
@@ -585,6 +598,7 @@ section{padding:90px 0;position:relative;}
     const cb = box.querySelector('.embed-close'); if(cb) cb.style.display='none';
     const ifr = box.querySelector('.ratio iframe'); if(ifr) ifr.remove();   // unload tour (quit)
     const poster = box.querySelector('.poster'); if(poster) poster.style.display='';
+    if(rotateHintEl){ rotateHintEl.classList.remove('show'); document.body.appendChild(rotateHintEl); }
     openBox = null;
   }
 
@@ -601,6 +615,9 @@ section{padding:90px 0;position:relative;}
     document.body.classList.add('tour-open');   // enables the portrait → rotate hint on mobile
     document.body.style.overflow='hidden';
     openBox = box;
+    // the rotate hint must live INSIDE the fullscreen element, or it won't
+    // render once the box enters native fullscreen
+    if(rotateHintEl){ box.appendChild(rotateHintEl); updateHint(); }
     // close (✕) button
     let cb = box.querySelector('.embed-close');
     if(!cb){
