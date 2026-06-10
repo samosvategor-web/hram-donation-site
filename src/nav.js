@@ -950,7 +950,8 @@ export class RoomNav {
     el.addEventListener('contextmenu', (e) => e.preventDefault());
     el.addEventListener('wheel', (e) => {
       e.preventDefault();
-      this.setTargetImmersion(this.targetImm - e.deltaY * 0.0009);
+      // two modes only — the wheel snaps between overview and walk (no intermediate zoom)
+      this.setTargetImmersion(e.deltaY < 0 ? 1 : 0);
     }, { passive: false });
 
     addEventListener('keydown', (e) => {

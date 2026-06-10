@@ -91,7 +91,7 @@ export function mountUI(container, nav, uiOpts = {}) {
   // ---------- status: mode + hint ----------
   const status = el('div', 'statusbar');
   const modeline = el('div', 'modeline');
-  modeline.innerHTML = `<div class="dot"></div><div class="txt">3/4 Обзор</div><div class="pct">00%</div>`;
+  modeline.innerHTML = `<div class="dot"></div><div class="txt">Обзор</div>`;
   const hintWrap = el('div', 'hint-wrap');
   const hint = el('div', 'hint');
   const hideBtn = el('button', 'hint-hide', 'Скрыть');
@@ -99,7 +99,7 @@ export function mountUI(container, nav, uiOpts = {}) {
   const showBtn = el('button', 'hint-show', '? Управление');
   status.appendChild(modeline); status.appendChild(hintWrap); status.appendChild(showBtn);
   ov.appendChild(status);
-  const modeTxt = modeline.querySelector('.txt'), modePct = modeline.querySelector('.pct');
+  const modeTxt = modeline.querySelector('.txt');
 
   const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
   const G = uiOpts.groundWord || { dat: 'полу', acc: 'пол' };  // floor vs ground wording
@@ -213,24 +213,67 @@ export function mountUI(container, nav, uiOpts = {}) {
   dragValue(w3plumb, w3bar, (e, rect) => clamp((e.clientX - rect.left) / rect.width, 0, 1), nav);
   dragValue(w3bar, w3bar, (e, rect) => clamp((e.clientX - rect.left) / rect.width, 0, 1), nav, true);
 
-  const widgets = { 1: W1, 2: W2, 3: W3 };
-  const renderers = { 1: w1render, 2: w2render, 3: w3render };
+  // ============================================================
+  //  Navigation mode toggle — TWO states only: Обзор / Прогулка.
+  //  Each button snaps immersion to 0 or 1 — there is no intermediate
+  //  zoom to pick (the camera still animates smoothly between the two).
+  //  The slider/dial/scale widgets above are built but left unmounted.
+  // ============================================================
+  const ICON_OVERVIEW = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M12 3 L21 8 L12 13 L3 8 Z"/><path d="M3 8 V16 L12 21 L21 16 V8"/><path d="M12 13 V21"/></svg>`;
+  const ICON_WALK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4.4" r="2"/><path d="M13 7 L11.4 13 L8 20 M13 13 L15.6 16 L15 21 M13 8.6 L8.6 10.6 M13 8.6 L17.6 11"/></svg>`;
+  const navToggle = el('div', 'w-toggle');
+  navToggle.innerHTML =
+    `<div class="modeseg">` +
+      `<button data-imm="0" class="on"><span class="ic">${ICON_OVERVIEW}</span><span class="nm">Обзор</span></button>` +
+      `<button data-imm="1"><span class="ic">${ICON_WALK}</span><span class="nm">Прогулка</span></button>` +
+    `</div>`;
+  ov.appendChild(navToggle);
+  const navBtns = navToggle.querySelectorAll('.modeseg button');
+  navBtns.forEach((b) => { b.onclick = () => nav.setTargetImmersion(+b.dataset.imm); });
+  function syncToggle(mode) {
+    const walk = mode === 'walk';
+    navBtns.forEach((b) => b.classList.toggle('on', (b.dataset.imm === '1') === walk));
+  }
 
-  // Only the slider widget (variant I) — the chosen navigation control.
-  ov.appendChild(W1);
-  W2.style.display = 'none'; W3.style.display = 'none';
-  let active = 1;
-  function setActive(n) { active = n; renderers[n](nav.getImmersion()); }
-  setActive(1);
+  // ---------- gesture watermark (centre): the ONE key action per mode ----------
+  // Overview → double-click/tap the floor to enter walk. Walk → single click/tap
+  // the floor to move there. Wording adapts to touch vs mouse and floor vs ground.
+  const gen = (G.acc === 'пол') ? 'пола' : 'земли';
+  const FLOOR = `<path d="M6 39 H42" opacity=".45"/>`;
+  const RIPPLE = `<ellipse cx="24" cy="39" rx="10" ry="3.2" opacity=".45"/>`;
+  const CURSOR = `<path d="M20 13 L20 31 L24.6 26.7 L27.4 32.7 L30.3 31.3 L27.5 25.5 L33.4 25.3 Z" fill="currentColor" stroke="none"/>`;
+  const HAND = `<path d="M21 17 V12.4 a2.4 2.4 0 0 1 4.8 0 V21 l3.7 1.3 a2.8 2.8 0 0 1 1.8 3.1 l-.8 4.9 a3.6 3.6 0 0 1-3.6 3 H22.2 a3.6 3.6 0 0 1-3-1.6 l-3.9-5.5 a2.2 2.2 0 0 1 3.4-2.8 L21 19"/>`;
+  const X2 = `<text x="32" y="17" font-family="'IBM Plex Mono', monospace" font-weight="600" font-size="11" fill="currentColor" stroke="none">×2</text>`;
+  const gwSvg = (parts) => `<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${parts}</svg>`;
+  const GW = isTouch ? {
+    orbit: gwSvg(`${FLOOR}${RIPPLE}${HAND}${X2}`) + `<div class="t">Дважды коснитесь ${gen}<b>войти в прогулку</b></div>`,
+    walk:  gwSvg(`${FLOOR}${RIPPLE}${HAND}`)       + `<div class="t">Коснитесь ${gen}<b>идти туда</b></div>`,
+  } : {
+    orbit: gwSvg(`${FLOOR}${RIPPLE}${CURSOR}${X2}`) + `<div class="t">Дважды щёлкните по ${G.dat}<b>войти в прогулку</b></div>`,
+    walk:  gwSvg(`${FLOOR}${RIPPLE}${CURSOR}`)      + `<div class="t">Щёлкните по ${G.dat}<b>идти туда</b></div>`,
+  };
+  const gwm = el('div', 'gesture-wm');
+  ov.appendChild(gwm);
+  let gwTimer = null;
+  function showWatermark(mode) {
+    if (!GW[mode]) return;
+    if (document.querySelector('.tour-card')) return;   // never overlap the onboarding tour
+    gwm.innerHTML = GW[mode];
+    gwm.classList.add('show');
+    clearTimeout(gwTimer);
+    gwTimer = setTimeout(() => gwm.classList.remove('show'), 5000);
+  }
+  syncToggle('orbit');
 
   // ---------- bind ----------
+  let uiMode = 'orbit';
   nav.onChange((st) => {
-    renderers[active](st.imm);
     updateCompass(st.heading);
     modeline.classList.toggle('imm', st.mode === 'walk');
-    modeTxt.textContent = st.mode === 'walk' ? 'Присутствие' : '3/4 Обзор';
-    modePct.textContent = String(Math.round(st.imm * 100)).padStart(2, '0') + '%';
+    modeTxt.textContent = st.mode === 'walk' ? 'Прогулка' : 'Обзор';
     showHint(st.mode);
+    syncToggle(st.mode);
+    if (st.mode !== uiMode) { uiMode = st.mode; showWatermark(st.mode); }
     // keep render-style toggle in sync (e.g. programmatic changes)
     if (renderSeg) renderSeg.querySelectorAll('.seg2 button').forEach((x) => x.classList.toggle('on', x.dataset.s === st.renderStyle));
   });
@@ -244,9 +287,9 @@ export function mountUI(container, nav, uiOpts = {}) {
       { el: null, title: 'Как смотреть проект', text: 'Короткий тур по управлению — несколько шагов. Можно пропустить в любой момент.' },
       renderSeg && { el: renderSeg, title: 'Отрисовка', text: 'Переключайте вид модели: <b>«Гипс»</b> — белый макет, <b>«Набросок»</b> — лёгкие линии.' },
       { el: comp, title: 'Компас', text: 'Показывает, в какую сторону направлен ваш взгляд.' },
-      { el: widgets[1], title: 'Обзор и прогулка', text: isTouch
-          ? 'Тяните ползунок вниз, чтобы войти внутрь от первого лица, и вверх — чтобы вернуться к обзору 3/4.'
-          : 'Тяните ползунок (или крутите <b>колесо мыши</b>): вниз — войти внутрь от первого лица, вверх — вернуться к обзору 3/4.' },
+      { el: navToggle, title: 'Обзор и прогулка', text: isTouch
+          ? `Два режима. <b>«Обзор»</b> — взгляд на проект сверху, 3/4. <b>«Прогулка»</b> — от первого лица. Переключайте кнопкой или <b>дважды коснитесь ${gen}</b>.`
+          : `Два режима. <b>«Обзор»</b> — взгляд на проект сверху, 3/4. <b>«Прогулка»</b> — от первого лица. Переключайте кнопкой или <b>дважды щёлкните по ${G.dat}</b>.` },
       { el: status, title: 'Управление', text: isTouch
           ? `<b>Проведите</b> — повернуть · <b>двумя пальцами</b> — сдвинуть · <b>двойное касание</b> по ${G.dat} — войти. В прогулке: <b>коснитесь ${G.acc === 'пол' ? 'пола' : 'земли'}</b> — идти.`
           : `<b>Тяните</b> — повернуть · <b>двойной клик</b> по ${G.dat} — войти. В прогулке: <span class="k">W</span><span class="k">A</span><span class="k">S</span><span class="k">D</span> или <b>клик</b> по ${G.dat} — идти.` },
@@ -296,6 +339,7 @@ export function mountUI(container, nav, uiOpts = {}) {
       scrim.remove(); card.remove();
       removeEventListener('resize', onResize);
       try { localStorage.setItem('nav.tourSeen', '1'); } catch (e) {}
+      showWatermark(uiMode);   // teach the one key gesture for the current mode
     }
     function onResize() { place(steps[i]); }
     addEventListener('resize', onResize);
@@ -316,6 +360,7 @@ export function mountUI(container, nav, uiOpts = {}) {
   let tourSeen = false;
   try { tourSeen = localStorage.getItem('nav.tourSeen') === '1'; } catch (e) {}
   if (!tourSeen) nav.onReady(() => setTimeout(startTour, 1400));
+  else nav.onReady(() => setTimeout(() => showWatermark(uiMode), 700));
 }
 
 // drag a value control: maps pointer → 0..1 via fn, sets nav.targetImmersion

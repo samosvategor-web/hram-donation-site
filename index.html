@@ -110,7 +110,7 @@ section{padding:90px 0;position:relative;}
 .embed .ratio{position:relative;width:100%;aspect-ratio:16/10;}
 .embed .ratio>iframe{position:absolute;inset:0;width:100%;height:100%;border:0;}
 /* app-mode: the tour always opens full-viewport, like a launched app */
-.embed.fs-on{position:fixed;inset:0;margin:0;max-width:none;border:0;z-index:9999;background:#e8e5de;}
+.embed.fs-on{position:fixed;inset:0;margin:0;max-width:none;border:0;z-index:9999;background:#e8e5de;transform:none !important;}
 .embed.fs-on .ratio{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto;}
 
 /* ---------- rotate-to-landscape hint (translucent, non-blocking watermark) ---------- */
@@ -137,8 +137,8 @@ section{padding:90px 0;position:relative;}
 .rotate-hint h3{font-family:var(--display);font-style:italic;font-weight:500;font-size:25px;line-height:1.1;margin:0;}
 .rotate-hint p{font-family:var(--serif);font-size:14px;line-height:1.6;color:rgba(243,234,217,.8);max-width:260px;margin:0;}
 /* native fullscreen (real devices) — also hides the browser's address bar / menu */
-.embed:fullscreen{width:100%;height:100%;max-width:none;margin:0;border:0;background:#e8e5de;}
-.embed:-webkit-full-screen{width:100%;height:100%;max-width:none;margin:0;border:0;background:#e8e5de;}
+.embed:fullscreen{width:100%;height:100%;max-width:none;margin:0;border:0;background:#e8e5de;transform:none !important;}
+.embed:-webkit-full-screen{width:100%;height:100%;max-width:none;margin:0;border:0;background:#e8e5de;transform:none !important;}
 .embed:fullscreen .ratio,.embed:-webkit-full-screen .ratio{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto;}
 /* close (quit app) button */
 .embed-close{position:fixed;top:16px;right:16px;z-index:10001;display:none;align-items:center;justify-content:center;
@@ -169,7 +169,7 @@ section{padding:90px 0;position:relative;}
 .car-track.drag{cursor:grabbing;scroll-snap-type:none;}
 .slide{flex:0 0 auto;width:min(62vw,540px);scroll-snap-align:center;background:var(--surface);border:1px solid var(--border);}
 .slide img{width:100%;aspect-ratio:4/3;object-fit:cover;}
-.slide .cap{padding:12px 16px;display:flex;justify-content:space-between;align-items:baseline;gap:12px;}
+.slide .cap{padding:12px 16px 22px;display:flex;justify-content:space-between;align-items:baseline;gap:12px;}
 .slide .cap .t{font-family:var(--display);font-style:italic;font-size:20px;}
 .slide .cap .i{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--ink-faint);}
 .car-ctl{display:flex;align-items:center;justify-content:center;gap:18px;margin-top:22px;}
@@ -394,7 +394,7 @@ section{padding:90px 0;position:relative;}
     <div class="kicker reveal"><span class="line"></span><span class="mark"></span><span class="line"></span></div>
     <div class="eyebrow reveal" style="text-align:center;display:block;">Приход</div>
     <h2 class="sec reveal">Дом для общины</h2>
-    <p class="prose reveal">Приход задуман как живое, тёплое пространство для людей всех возрастов: конференц-зал и кинозал, кафе, детские игровые и читальные комнаты, тихие гостиные под сводами облаков и золотых градов. Здесь рождается община — место, куда приходят не только на службу, но и чтобы быть вместе.</p>
+    <p class="prose reveal">Приход задуман как живое, тёплое пространство для людей всех возрастов: конференц-зал и кинозал, кафе, детские игровые и читальные комнаты, тихие гостиные для встреч и бесед. Здесь рождается община — место, куда приходят не только на службу, но и чтобы быть вместе.</p>
   </div>
 
   <!-- interior 3D widget -->
@@ -611,6 +611,7 @@ section{padding:90px 0;position:relative;}
     box.querySelector('.ratio').appendChild(ifr);
     // hide the poster, go full-viewport
     const poster = box.querySelector('.poster'); if(poster) poster.style.display='none';
+    box.classList.add('show');   // clear any residual reveal transform so FS fills from 0,0
     box.classList.add('fs-on');
     document.body.classList.add('tour-open');   // enables the portrait → rotate hint on mobile
     document.body.style.overflow='hidden';
