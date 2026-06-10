@@ -12,8 +12,7 @@ export function mountUI(container, nav, uiOpts = {}) {
   // ---------- wordmark ----------
   const wm = el('div', 'wordmark');
   const wmTitle = uiOpts.title || 'Приход';
-  const wmSub = uiOpts.subtitle || 'Интерьер — навигация';
-  wm.innerHTML = `<div class="a">${wmTitle}</div><div class="b">${wmSub}</div><div class="rule"></div>`;
+  wm.innerHTML = `<div class="a">${wmTitle}</div><div class="rule"></div>`;
   ov.appendChild(wm);
 
   // ---------- render-style toggle ----------
@@ -106,11 +105,11 @@ export function mountUI(container, nav, uiOpts = {}) {
   const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
   const G = uiOpts.groundWord || { dat: 'полу', acc: 'пол' };  // floor vs ground wording
   const HINTS = isTouch ? {
-    orbit: `<b>Проведите</b> — повернуть · <b>двумя пальцами</b> — сдвинуть · <b>двойное касание</b> по ${G.dat} — войти`,
-    walk: `<b>Коснитесь ${G.acc === 'пол' ? 'пола' : 'земли'}</b> — идти · <b>проведите</b> — осмотреться · <b>двойное касание</b> — выйти`,
+    orbit: `<b>Проведите</b> — повернуть · <b>двойное касание</b> по ${G.dat} — войти в прогулку`,
+    walk: `<b>Коснитесь ${G.acc === 'пол' ? 'пола' : 'земли'}</b> — идти · <b>проведите</b> — осмотреться · <b>двойное касание</b> — выйти из прогулки`,
   } : {
-    orbit: `<b>Тяните</b> — повернуть · <span class="k">Shift</span> или правая кнопка — сдвинуть · <b>двойной клик</b> по ${G.dat} — войти`,
-    walk: `<span class="k">W</span><span class="k">A</span><span class="k">S</span><span class="k">D</span> или <b>клик</b> по ${G.dat} — идти · <span class="k">←</span><span class="k">→</span> — повернуть · <b>Тяните</b> — осмотреться · <b>двойной клик</b> — выйти`,
+    orbit: `<b>Тяните</b> — повернуть · <span class="k">Shift</span> или правая кнопка — сдвинуть · <b>двойной клик</b> по ${G.dat} — войти в прогулку`,
+    walk: `<span class="k">W</span><span class="k">A</span><span class="k">S</span><span class="k">D</span> или <b>клик</b> по ${G.dat} — идти · <span class="k">←</span><span class="k">→</span> — повернуть · <b>Тяните</b> — осмотреться · <b>двойной клик</b> — выйти из прогулки`,
   };
   // instructions stay visible by default; user can hide (preference persists)
   let hintHidden = false;
@@ -249,10 +248,10 @@ export function mountUI(container, nav, uiOpts = {}) {
   const gwSvg = (parts) => `<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${parts}</svg>`;
   const GW = isTouch ? {
     orbit: gwSvg(`${FLOOR}${RIPPLE}${HAND}${X2}`) + `<div class="t">Дважды коснитесь ${gen}<b>войти в прогулку</b></div>`,
-    walk:  gwSvg(`${FLOOR}${RIPPLE}${HAND}`)       + `<div class="t">Коснитесь ${gen}<b>идти туда</b></div>`,
+    walk:  gwSvg(`${FLOOR}${RIPPLE}${HAND}${X2}`) + `<div class="t">Коснитесь ${gen} — идти туда<b>дважды — выйти из прогулки</b></div>`,
   } : {
     orbit: gwSvg(`${FLOOR}${RIPPLE}${CURSOR}${X2}`) + `<div class="t">Дважды щёлкните по ${G.dat}<b>войти в прогулку</b></div>`,
-    walk:  gwSvg(`${FLOOR}${RIPPLE}${CURSOR}`)      + `<div class="t">Щёлкните по ${G.dat}<b>идти туда</b></div>`,
+    walk:  gwSvg(`${FLOOR}${RIPPLE}${CURSOR}${X2}`) + `<div class="t">Щёлкните по ${G.dat} — идти туда<b>дважды — выйти из прогулки</b></div>`,
   };
   const gwm = el('div', 'gesture-wm');
   ov.appendChild(gwm);

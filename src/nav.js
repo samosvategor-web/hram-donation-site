@@ -924,8 +924,8 @@ export class RoomNav {
       const dx = c.x - lastCx, dy = c.y - lastCy;
       lastCx = c.x; lastCy = c.y;
       moved += Math.abs(dx) + Math.abs(dy);
-      const pan = (ptrType === 'touch') ? pointers.size >= 2 : mouseMode === 'pan';
-      if (pan && this.imm < 0.8) this._pan(dx, dy);   // pan the floor (while orbit hint is shown)
+      const pan = (ptrType === 'touch') ? false : mouseMode === 'pan';
+      if (pan && this.imm < 0.8) this._pan(dx, dy);   // pan the floor (desktop only — Shift / right-drag)
       else {
         // Touch + presence/walk → direct-manipulation look: the world follows the
         // finger (drag right → scene slides right → you turn left), matching Street
