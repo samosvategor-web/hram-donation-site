@@ -237,8 +237,10 @@ export function mountUI(container, nav, uiOpts = {}) {
   }
 
   // ---------- gesture watermark (centre): the ONE key action per mode ----------
-  // Overview → double-click/tap the floor to enter walk. Walk → single click/tap
-  // the floor to move there. Wording adapts to touch vs mouse and floor vs ground.
+  // Overview → double-click/tap the floor to ENTER walk (deliberate — single taps
+  // never change mode, so you can't fly in by accident). Walk → single click/tap
+  // the floor to MOVE. Exit is ONLY the «Обзор» button / Esc, never a click. The
+  // ×2 badge appears solely on the entry hint, where a double-click is correct.
   const gen = (G.acc === 'пол') ? 'пола' : 'земли';
   const FLOOR = `<path d="M6 39 H42" opacity=".45"/>`;
   const RIPPLE = `<ellipse cx="24" cy="39" rx="10" ry="3.2" opacity=".45"/>`;
@@ -248,22 +250,74 @@ export function mountUI(container, nav, uiOpts = {}) {
   const gwSvg = (parts) => `<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${parts}</svg>`;
   const GW = isTouch ? {
     orbit: gwSvg(`${FLOOR}${RIPPLE}${HAND}${X2}`) + `<div class="t">Дважды коснитесь ${gen}<b>войти в прогулку</b></div>`,
-    walk:  gwSvg(`${FLOOR}${RIPPLE}${HAND}${X2}`) + `<div class="t">Коснитесь ${gen} — идти туда<b>дважды — выйти из прогулки</b></div>`,
+    walk:  gwSvg(`${FLOOR}${RIPPLE}${HAND}`)      + `<div class="t">Коснитесь ${gen}<b>идти</b></div>`,
   } : {
     orbit: gwSvg(`${FLOOR}${RIPPLE}${CURSOR}${X2}`) + `<div class="t">Дважды щёлкните по ${G.dat}<b>войти в прогулку</b></div>`,
-    walk:  gwSvg(`${FLOOR}${RIPPLE}${CURSOR}${X2}`) + `<div class="t">Щёлкните по ${G.dat} — идти туда<b>дважды — выйти из прогулки</b></div>`,
+    walk:  gwSvg(`${FLOOR}${RIPPLE}${CURSOR}`)      + `<div class="t">Щёлкните по ${G.dat}<b>идти</b></div>`,
   };
   const gwm = el('div', 'gesture-wm');
   ov.appendChild(gwm);
-  let gwTimer = null;
+
+  // The «Обзор» (exit) segment — pulsed once, AFTER the move hint has been read, so
+  // "how to move" and "how to exit" are taught one after another, never at once.
+  const overviewBtn = navToggle.querySelector('button[data-imm="0"]');
+
+  // Watermark = a single message at a time. showWatermark just paints it; the timing
+  // (how long it stays + the follow-up exit pulse) is owned by the per-mode helpers
+  // below, so the two teachings never overlap. `learned` shortens repeat shows.
+  let gwTimer = null, pulseTimer = null, gwMode = null;
+  const learned = { orbit: false, walk: false };
+  function hideWatermark() { gwm.classList.remove('show'); gwMode = null; }
   function showWatermark(mode) {
     if (!GW[mode]) return;
-    if (document.querySelector('.tour-card')) return;   // never overlap the onboarding tour
+    gwMode = mode;
     gwm.innerHTML = GW[mode];
     gwm.classList.add('show');
-    clearTimeout(gwTimer);
-    gwTimer = setTimeout(() => gwm.classList.remove('show'), 5000);
   }
+  // Overview: "double-click to enter" — the resting-state hint. Persists the first
+  // time; once the user has entered at least once, later returns show a brief nudge.
+  function showOrbitHint() {
+    clearTimeout(gwTimer); clearTimeout(pulseTimer);
+    showWatermark('orbit');
+    if (learned.orbit) gwTimer = setTimeout(() => { if (gwMode === 'orbit') hideWatermark(); }, 4000);
+  }
+  // Walk: hold "click to move" long enough to read, then fade it and — only after it
+  // is gone — pulse the «Обзор» exit control. Generous on the first visit.
+  function showWalkHint() {
+    clearTimeout(gwTimer); clearTimeout(pulseTimer);
+    showWatermark('walk');
+    const dur = learned.walk ? 2600 : 4500;
+    gwTimer = setTimeout(() => {
+      if (gwMode === 'walk') hideWatermark();
+      learned.walk = true;
+      pulseTimer = setTimeout(pulseExit, 480);   // exit teaching lands after the fade
+    }, dur);
+  }
+
+  // one-time soft pulse drawing the eye to the exit control + a tiny fading tag
+  let exitPulsed = false;
+  function pulseExit() {
+    if (exitPulsed || !overviewBtn) return;
+    exitPulsed = true;
+    overviewBtn.classList.add('pulse');
+    const tag = el('div', 'exit-tag', isTouch ? 'выход' : 'выход · Esc');
+    navToggle.appendChild(tag);
+    requestAnimationFrame(() => tag.classList.add('show'));
+    setTimeout(() => {
+      overviewBtn.classList.remove('pulse');
+      tag.classList.remove('show');
+      setTimeout(() => { if (tag.parentNode) tag.remove(); }, 450);
+    }, 3200);
+  }
+
+  // single-tap ripple feedback in overview (the "tap twice" nudge from nav.js)
+  nav.onOverviewTapFeedback((cx, cy) => {
+    const r = el('div', 'tap-ripple');
+    r.style.left = cx + 'px'; r.style.top = cy + 'px';
+    ov.appendChild(r);
+    setTimeout(() => { if (r.parentNode) r.remove(); }, 650);
+  });
+
   syncToggle('orbit');
 
   // ---------- bind ----------
@@ -272,95 +326,18 @@ export function mountUI(container, nav, uiOpts = {}) {
     updateCompass(st.heading);
     modeline.classList.toggle('imm', st.mode === 'walk');
     modeTxt.textContent = st.mode === 'walk' ? 'Прогулка' : 'Обзор';
-    showHint(st.mode);
     syncToggle(st.mode);
-    if (st.mode !== uiMode) { uiMode = st.mode; showWatermark(st.mode); }
+    if (st.mode !== uiMode) {
+      uiMode = st.mode;
+      if (st.mode === 'walk') { learned.orbit = true; showWalkHint(); }
+      else showOrbitHint();
+    }
     // keep render-style toggle in sync (e.g. programmatic changes)
     if (renderSeg) renderSeg.querySelectorAll('.seg2 button').forEach((x) => x.classList.toggle('on', x.dataset.s === st.renderStyle));
   });
-  showHint('orbit');
 
-  // ============================================================
-  //  Onboarding tour — coachmarks over each control (first visit)
-  // ============================================================
-  function startTour() {
-    const steps = [
-      { el: null, title: 'Как смотреть проект', text: 'Короткий тур по управлению — несколько шагов. Можно пропустить в любой момент.' },
-      renderSeg && { el: renderSeg, title: 'Отрисовка', text: 'Переключайте вид модели: <b>«Гипс»</b> — белый макет, <b>«Набросок»</b> — лёгкие линии.' },
-      { el: comp, title: 'Компас', text: 'Показывает, в какую сторону направлен ваш взгляд.' },
-      { el: navToggle, title: 'Обзор и прогулка', text: isTouch
-          ? `Два режима. <b>«Обзор»</b> — взгляд на проект сверху, 3/4. <b>«Прогулка»</b> — от первого лица. Переключайте кнопкой или <b>дважды коснитесь ${gen}</b>.`
-          : `Два режима. <b>«Обзор»</b> — взгляд на проект сверху, 3/4. <b>«Прогулка»</b> — от первого лица. Переключайте кнопкой или <b>дважды щёлкните по ${G.dat}</b>.` },
-    ].filter(Boolean);
-
-    const scrim = el('div', 'tour-scrim');
-    const card = el('div', 'tour-card');
-    ov.appendChild(scrim); ov.appendChild(card);
-    let i = 0, spotEl = null;
-
-    function clearSpot() { if (spotEl) { spotEl.classList.remove('tour-spot'); spotEl.style.zIndex = ''; spotEl = null; } }
-    function place(s) {
-      const cw = card.offsetWidth, ch = card.offsetHeight, M = 16, vw = innerWidth, vh = innerHeight;
-      if (!s.el) { card.style.left = (vw - cw) / 2 + 'px'; card.style.top = (vh - ch) / 2 + 'px'; return; }
-      const r = s.el.getBoundingClientRect();
-      let left, top;
-      if (vh - r.bottom > ch + M && r.left < vw * 0.72) { top = r.bottom + M; left = r.left; }
-      else if (r.left > cw + M) { left = r.left - cw - M; top = r.top; }
-      else if (r.top > ch + M) { top = r.top - ch - M; left = r.left; }
-      else if (vw - r.right > cw + M) { left = r.right + M; top = r.top; }
-      else { left = (vw - cw) / 2; top = vh - ch - M; }
-      card.style.left = clamp(left, M, vw - cw - M) + 'px';
-      card.style.top = clamp(top, M, vh - ch - M) + 'px';
-    }
-    function render() {
-      const s = steps[i];
-      clearSpot();
-      if (s.el) { s.el.classList.add('tour-spot'); s.el.style.zIndex = '26'; spotEl = s.el; }
-      const last = i === steps.length - 1;
-      card.innerHTML =
-        `<div class="tc-step">${i + 1} / ${steps.length}</div>` +
-        `<div class="tc-title">${s.title}</div>` +
-        `<div class="tc-text">${s.text}</div>` +
-        `<div class="tc-btns">` +
-          (i > 0 ? `<button class="tc-back">Назад</button>` : '') +
-          (last ? '' : `<button class="tc-skip">Пропустить</button>`) +
-          `<button class="tc-next">${last ? 'Понятно' : 'Далее'}</button>` +
-        `</div>`;
-      // measure then position (card width is fixed by CSS)
-      place(s);
-      const back = card.querySelector('.tc-back'); if (back) back.onclick = () => { i = Math.max(0, i - 1); render(); };
-      const skip = card.querySelector('.tc-skip'); if (skip) skip.onclick = finish;
-      card.querySelector('.tc-next').onclick = () => { if (last) finish(); else { i++; render(); } };
-    }
-    function finish() {
-      clearSpot();
-      scrim.remove(); card.remove();
-      removeEventListener('resize', onResize);
-      try { localStorage.setItem('nav.tourSeen', '1'); } catch (e) {}
-      showWatermark(uiMode);   // teach the one key gesture for the current mode
-    }
-    function onResize() { place(steps[i]); }
-    addEventListener('resize', onResize);
-    render();
-  }
-  // expose for manual replay (e.g. the "?" control)
-  window.__startTour = startTour;
-  function restartTour(){
-    document.querySelectorAll('.tour-scrim,.tour-card').forEach(e=>e.remove());
-    document.querySelectorAll('.tour-spot').forEach(e=>{ e.classList.remove('tour-spot'); e.style.zIndex=''; });
-    startTour();
-  }
-  const replay = el('button', 'tour-replay', '?');
-  replay.title = 'Показать обучение заново';
-  replay.setAttribute('aria-label', 'Обучающий тур');
-  // Onboarding replay ("?") button intentionally NOT mounted — the pop-up
-  // gesture hints already make the controls self-explanatory. Kept built so
-  // window.__startTour stays available for the first-run tour.
-  void replay;
-  let tourSeen = false;
-  try { tourSeen = localStorage.getItem('nav.tourSeen') === '1'; } catch (e) {}
-  if (!tourSeen) nav.onReady(() => setTimeout(startTour, 1400));
-  else nav.onReady(() => setTimeout(() => showWatermark(uiMode), 700));
+  // First hint once the model is ready.
+  nav.onReady(() => setTimeout(() => { uiMode === 'walk' ? showWalkHint() : showOrbitHint(); }, 700));
 }
 
 // drag a value control: maps pointer → 0..1 via fn, sets nav.targetImmersion

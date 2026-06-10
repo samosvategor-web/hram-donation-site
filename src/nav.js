@@ -874,12 +874,17 @@ export class RoomNav {
                 Math.hypot(cx - this._lastTap.x, cy - this._lastTap.y) < 26;
     this._lastTap = dbl ? null : { t: now, x: cx, y: cy };
     if (this.imm < 0.55) {
-      if (dbl) this._diveAt(cx, cy);          // 3/4: double-click dives in
+      // Overview: a DELIBERATE double-click enters walk at the point (single taps
+      // never change mode → no accidental flights). Single tap just pings a ripple
+      // as a "tap twice" hint. Exit lives only on the button/Esc, never on a click.
+      if (dbl) this._diveAt(cx, cy);
+      else if (this._tapFeedbackCb) this._tapFeedbackCb(cx, cy);
     } else {
-      if (dbl) { this.glide = null; this.setTargetImmersion(0); } // presence: double-click returns to overview
-      else this._tapMove(cx, cy);             // presence: single tap walks to point
+      this._tapMove(cx, cy);                   // walk: every tap walks to the point
     }
   }
+  // UI hook: gentle feedback for a single tap in overview (ripple at screen point).
+  onOverviewTapFeedback(cb) { this._tapFeedbackCb = cb; }
 
   // Double-click the floor in 3/4 → glide-dive into the room at that spot.
   _diveAt(cx, cy) {
