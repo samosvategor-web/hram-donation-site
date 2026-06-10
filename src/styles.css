@@ -106,12 +106,10 @@ html,body{margin:0;height:100%;background:var(--paper);overflow:hidden;
   backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);}
 
 /* ---------- navigation mode toggle (TWO states: overview / walk) ----------
-   Quiet, compact, top-right — stays out of the centred model and reads as a
+   Quiet, compact, bottom-right — stays out of the centred model and reads as a
    secondary HUD control, not a loud filled button. Active = ink label + faint
-   wash + a thin accent underline (no heavy dark fill). Sits on the top row just
-   to the LEFT of the embed's ✕ close button (top:16/right:16, 46px), separated
-   from it by a gap equal to the cross's own size. */
-.w-toggle{position:absolute;right:108px;top:24px;display:flex;z-index:6;}
+   wash + a thin accent underline (no heavy dark fill). */
+.w-toggle{position:absolute;right:24px;bottom:22px;display:flex;z-index:6;}
 .w-toggle .modeseg{display:flex;border:1px solid var(--hair);background:var(--panel);
   backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);}
 .w-toggle .modeseg button{appearance:none;border:0;border-left:1px solid var(--hair);background:none;
@@ -227,7 +225,7 @@ html,body{margin:0;height:100%;background:var(--paper);overflow:hidden;
 @media (max-width:900px){
   .compass{width:230px;}
   .w-slider{height:54vh;right:20px;}
-  .w-toggle{right:108px;}
+  .w-toggle{right:24px;}
   .w-scale{width:80vw;}
 }
 /* ---------- responsive: phone ---------- */
@@ -249,17 +247,12 @@ html,body{margin:0;height:100%;background:var(--paper);overflow:hidden;
   .w-slider .knob{width:44px;height:44px;}
   .w-dial{right:16px;bottom:80px;width:128px;height:128px;}
   .w-scale{width:90vw;bottom:24px;}
-  .w-toggle{right:108px;top:20px;}
+  .w-toggle{right:14px;bottom:16px;top:auto;}
   .w-toggle .modeseg button{padding:7px 10px;letter-spacing:.14em;gap:6px;}
   .gesture-wm{bottom:21%;}
   .gesture-wm svg{width:40px;height:40px;}
   .gesture-wm .t{font-size:9px;letter-spacing:.12em;}
-  .statusbar{left:14px;bottom:16px;right:120px;max-width:none;}
-  .tour-replay{right:14px;bottom:14px;}
-  .hint{font-size:9.5px;}
-  .hint .k{padding:1px 5px;}
 }
 @media (max-width:620px) and (orientation:landscape){
   .w-slider{height:74vh;top:50%;}
-  .statusbar{right:160px;}
 }

@@ -98,7 +98,9 @@ export function mountUI(container, nav, uiOpts = {}) {
   hintWrap.appendChild(hint); hintWrap.appendChild(hideBtn);
   const showBtn = el('button', 'hint-show', '? Управление');
   status.appendChild(modeline); status.appendChild(hintWrap); status.appendChild(showBtn);
-  ov.appendChild(status);
+  // The bottom-left status cluster (mode line + persistent control explanation) is
+  // intentionally NOT mounted: the bottom-right toggle shows the active mode and the
+  // centre watermark teaches the click gestures. Kept built so refs below stay valid.
   const modeTxt = modeline.querySelector('.txt');
 
   const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -290,9 +292,6 @@ export function mountUI(container, nav, uiOpts = {}) {
       { el: navToggle, title: 'Обзор и прогулка', text: isTouch
           ? `Два режима. <b>«Обзор»</b> — взгляд на проект сверху, 3/4. <b>«Прогулка»</b> — от первого лица. Переключайте кнопкой или <b>дважды коснитесь ${gen}</b>.`
           : `Два режима. <b>«Обзор»</b> — взгляд на проект сверху, 3/4. <b>«Прогулка»</b> — от первого лица. Переключайте кнопкой или <b>дважды щёлкните по ${G.dat}</b>.` },
-      { el: status, title: 'Управление', text: isTouch
-          ? `<b>Проведите</b> — повернуть · <b>двумя пальцами</b> — сдвинуть · <b>двойное касание</b> по ${G.dat} — войти. В прогулке: <b>коснитесь ${G.acc === 'пол' ? 'пола' : 'земли'}</b> — идти.`
-          : `<b>Тяните</b> — повернуть · <b>двойной клик</b> по ${G.dat} — войти. В прогулке: <span class="k">W</span><span class="k">A</span><span class="k">S</span><span class="k">D</span> или <b>клик</b> по ${G.dat} — идти.` },
     ].filter(Boolean);
 
     const scrim = el('div', 'tour-scrim');
@@ -355,8 +354,10 @@ export function mountUI(container, nav, uiOpts = {}) {
   const replay = el('button', 'tour-replay', '?');
   replay.title = 'Показать обучение заново';
   replay.setAttribute('aria-label', 'Обучающий тур');
-  replay.onclick = restartTour;
-  ov.appendChild(replay);
+  // Onboarding replay ("?") button intentionally NOT mounted — the pop-up
+  // gesture hints already make the controls self-explanatory. Kept built so
+  // window.__startTour stays available for the first-run tour.
+  void replay;
   let tourSeen = false;
   try { tourSeen = localStorage.getItem('nav.tourSeen') === '1'; } catch (e) {}
   if (!tourSeen) nav.onReady(() => setTimeout(startTour, 1400));
