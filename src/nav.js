@@ -693,6 +693,14 @@ export class RoomNav {
     // Entering walk/presence mode: level the horizon so the walk never starts
     // looking at the floor or the sky (drop any pitch carried over from orbit).
     if (v >= 0.86 && this.targetImm < 0.86) this.pitchOffset = 0;
+    // Leaving walk → recentre the 3/4 framing on the MODEL, not on wherever you
+    // walked to. Otherwise the overview orbits (and auto-rotates) around an off-centre
+    // floor point and the plan drifts/spins off the edge. Glide the focus back to the
+    // footprint centre and ease the tilt back to rest during the pull-out.
+    if (v <= 0.05 && this.targetImm > 0.05 && this.center) {
+      this.glide = { fromX: this.walkX, fromZ: this.walkZ, toX: this.center.x, toZ: this.center.z, t: 0, dur: 0.7 };
+      this._recenter = true;
+    }
     this.targetImm = v;
     if (user) this._interact();
   }
@@ -894,11 +902,55 @@ export class RoomNav {
     this._ray.firstHitOnly = true;
     const hits = this._ray.intersectObjects(this.collisionMeshes, true);
     if (!hits.length) return;
-    const p = hits[0].point;
-    const tx = clamp(p.x, this.walkBounds.minX, this.walkBounds.maxX);
-    const tz = clamp(p.z, this.walkBounds.minZ, this.walkBounds.maxZ);
+    const hit = hits[0];
+    let tx = hit.point.x, tz = hit.point.z;
+    // Surface normal in world space (default "up" if the face is missing).
+    let nx = 0, ny = 1, nz = 0;
+    if (hit.face) {
+      const wn = this._tmp.copy(hit.face.normal).transformDirection(hit.object.matrixWorld);
+      nx = wn.x; ny = wn.y; nz = wn.z;
+    }
+    // Clicked a wall / steep face → its x,z sit ON the wall, so diving there would
+    // drop you INSIDE the geometry (a trap you can't walk out of). Step the landing
+    // spot back along the wall's horizontal normal so you arrive in front of it.
+    if (Math.abs(ny) < 0.5) {
+      const hn = Math.hypot(nx, nz) || 1;
+      tx += (nx / hn) * 0.7;
+      tz += (nz / hn) * 0.7;
+    }
+    tx = clamp(tx, this.walkBounds.minX, this.walkBounds.maxX);
+    tz = clamp(tz, this.walkBounds.minZ, this.walkBounds.maxZ);
+    // Final safety: push the spot out of any wall still within the player radius, so
+    // you never land embedded (covers concave corners the single push didn't clear).
+    [tx, tz] = this._freeSpot(tx, tz);
     this.glide = { fromX: this.walkX, fromZ: this.walkZ, toX: tx, toZ: tz, t: 0, dur: 0.7 };
     this.setTargetImmersion(1);
+  }
+
+  // Push an (x,z) out of any wall within the player radius so a dive never lands
+  // embedded in geometry. Probes the 4 ground axes at body height; if a wall is
+  // closer than R, steps back along that axis. A few passes resolve inside corners.
+  _freeSpot(x, z) {
+    const R = 0.6, oy = (this.eyeY ?? this.groundY ?? 0) - 0.4;
+    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    const ray = this._ray; ray.firstHitOnly = true;
+    for (let iter = 0; iter < 3; iter++) {
+      let pushed = false;
+      for (const [sx, sz] of dirs) {
+        ray.set(this._tmp.set(x, oy, z), this._dirX.set(sx, 0, sz));
+        ray.far = R;
+        const h = ray.intersectObjects(this.collisionMeshes, true);
+        if (h.length && h[0].distance < R) {
+          const back = R - h[0].distance + 0.02;
+          x -= sx * back; z -= sz * back;
+          pushed = true;
+        }
+      }
+      if (!pushed) break;
+    }
+    ray.far = Infinity;
+    return [clamp(x, this.walkBounds.minX, this.walkBounds.maxX),
+            clamp(z, this.walkBounds.minZ, this.walkBounds.maxZ)];
   }
 
   // ---------- input ----------
@@ -1114,6 +1166,13 @@ export class RoomNav {
     this.imm = expSmooth(this.imm, this.targetImm, dt, 5.5);
     if (this.imm < 0.0015) this.imm = 0;
     const s = smooth(this.imm);
+
+    // While pulling out to overview, ease any carried-over look-tilt back to the rest
+    // pose so the plan settles square (paired with the focus recentre in setTargetImmersion).
+    if (this._recenter) {
+      this.pitchOffset = expSmooth(this.pitchOffset, 0, dt, 6);
+      if (this.imm < 0.05) { this.pitchOffset = 0; this._recenter = false; }
+    }
 
     // LOD streaming: poll proximity a few times a second (cheap; loads one at a time)
     if (this._stream) { this._streamT += dt; if (this._streamT > 0.35) { this._streamT = 0; this._streamTick(); } }
