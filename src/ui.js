@@ -258,6 +258,81 @@ export function mountUI(container, nav, uiOpts = {}) {
   const gwm = el('div', 'gesture-wm');
   ov.appendChild(gwm);
 
+  // ---------- secondary keyboard hint (desktop walk only) ----------
+  // Taught AFTER the central click-to-move hint, as its own little act: the chip
+  // appears centre-stage as a "toast" reading «Ещё можно — стрелками», holds long
+  // enough to read, then glides down to the bottom-left corner and parks there in
+  // compact form — staying until the visitor actually presses an arrow key (proof
+  // they've learned it). Once used, it never returns (preference persists).
+  let kbdHint = null, arrowsLearned = false, kbdIntroShown = false;
+  try { arrowsLearned = localStorage.getItem('nav.arrowsLearned') === '1'; } catch (e) {}
+  if (!isTouch) {
+    kbdHint = el('div', 'kbd-hint');
+    kbdHint.innerHTML =
+      `<span class="lead">Ещё можно — стрелками</span>` +
+      `<span class="keys"><span class="k">↑</span><span class="k">↓</span></span>` +
+      `<span class="cap">идти</span><span class="sep">·</span>` +
+      `<span class="keys"><span class="k">←</span><span class="k">→</span></span>` +
+      `<span class="cap">поворот</span>`;
+    ov.appendChild(kbdHint);
+  }
+  let kbdTimer = null;
+  // Park directly in the corner, compact — used on repeat walks (intro already seen).
+  function dockKbdHint() {
+    if (!kbdHint || arrowsLearned) return;
+    clearTimeout(kbdTimer);
+    kbdHint.classList.remove('intro');
+    kbdHint.style.transition = '';
+    kbdHint.style.transform = '';
+    kbdHint.style.opacity = '';
+    kbdHint.classList.add('show');
+  }
+  // The full act: toast in the centre → glide to the corner → rest compact.
+  function introKbdHint() {
+    if (!kbdHint || arrowsLearned || uiMode !== 'walk') return;
+    clearTimeout(kbdTimer);
+    // expand the lead-in and lay the chip out (invisibly) at the corner to measure it
+    kbdHint.classList.add('intro');
+    kbdHint.style.transition = 'none';
+    kbdHint.style.transform = 'none';
+    kbdHint.style.opacity = '0';
+    kbdHint.classList.add('show');
+    void kbdHint.offsetWidth;
+    const r = kbdHint.getBoundingClientRect();
+    const dx = Math.round(innerWidth / 2 - (r.left + r.width / 2));
+    const dy = Math.round(innerHeight * 0.58 - (r.top + r.height / 2));
+    kbdHint.style.transform = `translate(${dx}px, ${dy}px)`;
+    void kbdHint.offsetWidth;
+    // release to CSS transitions and fade the toast in at centre
+    kbdHint.style.transition = '';
+    kbdHint.style.opacity = '';
+    // after it's been read: collapse the lead-in and glide home to the corner
+    kbdTimer = setTimeout(() => {
+      if (uiMode !== 'walk') return;
+      kbdHint.classList.remove('intro');   // lead-in collapses on its own
+      kbdHint.style.transform = '';        // glides back to the corner
+    }, 2500);
+  }
+  function hideKbdHint() {
+    if (!kbdHint) return;
+    clearTimeout(kbdTimer);
+    kbdHint.classList.remove('show', 'intro');
+    kbdHint.style.transition = '';
+    kbdHint.style.transform = '';
+    kbdHint.style.opacity = '';
+  }
+  // learned-by-doing: the first arrow press dismisses the hint for good
+  if (kbdHint) {
+    addEventListener('keydown', (e) => {
+      const k = e.key;
+      if (k === 'ArrowUp' || k === 'ArrowDown' || k === 'ArrowLeft' || k === 'ArrowRight') {
+        arrowsLearned = true;
+        try { localStorage.setItem('nav.arrowsLearned', '1'); } catch (err) {}
+        hideKbdHint();
+      }
+    });
+  }
+
   // The «Обзор» (exit) segment — pulsed once, AFTER the move hint has been read, so
   // "how to move" and "how to exit" are taught one after another, never at once.
   const overviewBtn = navToggle.querySelector('button[data-imm="0"]');
@@ -278,19 +353,35 @@ export function mountUI(container, nav, uiOpts = {}) {
   // time; once the user has entered at least once, later returns show a brief nudge.
   function showOrbitHint() {
     clearTimeout(gwTimer); clearTimeout(pulseTimer);
+    hideKbdHint();
     showWatermark('orbit');
     if (learned.orbit) gwTimer = setTimeout(() => { if (gwMode === 'orbit') hideWatermark(); }, 4000);
   }
   // Walk: hold "click to move" long enough to read, then fade it and — only after it
-  // is gone — pulse the «Обзор» exit control. Generous on the first visit.
+  // is gone — play the arrow-key act (toast → dock), and finally pulse the «Обзор»
+  // exit. Each teaching lands after the previous one clears, so none overlap.
   function showWalkHint() {
     clearTimeout(gwTimer); clearTimeout(pulseTimer);
+    hideKbdHint();
     showWatermark('walk');
     const dur = learned.walk ? 2600 : 4500;
     gwTimer = setTimeout(() => {
       if (gwMode === 'walk') hideWatermark();
       learned.walk = true;
-      pulseTimer = setTimeout(pulseExit, 480);   // exit teaching lands after the fade
+      if (kbdHint && !arrowsLearned) {
+        if (!kbdIntroShown) {
+          kbdIntroShown = true;
+          pulseTimer = setTimeout(() => {
+            introKbdHint();                              // toast → dock to corner
+            pulseTimer = setTimeout(pulseExit, 3900);    // exit lands once it's parked
+          }, 460);
+        } else {
+          dockKbdHint();                                 // repeat walk → straight to corner
+          pulseTimer = setTimeout(pulseExit, 480);
+        }
+      } else {
+        pulseTimer = setTimeout(pulseExit, 480);
+      }
     }, dur);
   }
 

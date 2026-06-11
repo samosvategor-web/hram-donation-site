@@ -138,6 +138,30 @@ html,body{margin:0;height:100%;background:var(--paper);overflow:hidden;
   box-shadow:0 6px 22px rgba(20,18,14,.13);}
 .gesture-wm .t b{display:block;font-weight:600;color:var(--ink);margin-top:3px;letter-spacing:.16em;}
 
+/* ---------- secondary keyboard hint (desktop walk): a "toast" that appears centre
+   AFTER the click-to-move hint, then glides into the bottom-left corner and parks
+   compact. Anchored at the corner; the centre position is applied via transform so
+   the dock is a smooth glide. The lead-in word collapses as it parks. ------------- */
+.kbd-hint{position:absolute;left:26px;bottom:26px;transform:translateY(8px);
+  z-index:8;display:flex;align-items:center;gap:8px;pointer-events:none;white-space:nowrap;
+  opacity:0;transition:opacity .5s ease,transform .6s cubic-bezier(.22,.61,.36,1);
+  background:var(--panel);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  border:1px solid var(--hair-soft);padding:6px 12px;border-radius:2px;
+  box-shadow:0 5px 18px rgba(20,18,14,.12);
+  font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);}
+.kbd-hint.show{opacity:1;transform:translateY(0);}
+.kbd-hint.intro{box-shadow:0 8px 26px rgba(20,18,14,.16);}
+.kbd-hint .lead{display:inline-block;overflow:hidden;white-space:nowrap;
+  max-width:0;opacity:0;margin-left:-8px;color:var(--ink);font-weight:600;
+  transition:max-width .5s ease,opacity .4s ease,margin-left .5s ease;}
+.kbd-hint.intro .lead{max-width:240px;opacity:1;margin-left:0;}
+.kbd-hint .keys{display:flex;gap:3px;}
+.kbd-hint .k{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;
+  padding:0 3px;border:1px solid var(--hair-strong);border-radius:2px;
+  font-size:9px;letter-spacing:0;color:var(--ink);}
+.kbd-hint .cap{color:var(--ink-2);}
+.kbd-hint .sep{color:var(--hair-strong);}
+
 /* single-tap ripple in overview ("tap twice" nudge) */
 .tap-ripple{position:absolute;width:14px;height:14px;border:1px solid var(--accent);border-radius:50%;
   transform:translate(-50%,-50%) scale(.4);pointer-events:none;z-index:7;opacity:.65;
